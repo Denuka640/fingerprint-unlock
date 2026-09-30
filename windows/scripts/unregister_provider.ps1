@@ -21,4 +21,4 @@ if (Test-Path $dllPath) {
 Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{8B37A55C-3BF2-4D3E-A59B-51421DA10842}" -Force -ErrorAction SilentlyContinue
 Remove-Item -Path "HKCR:\CLSID\{8B37A55C-3BF2-4D3E-A59B-51421DA10842}" -Recurse -Force -ErrorAction SilentlyContinue
 
-Write-Host "✓ Fingerprint Credential Provider unregistered successfully." -ForegroundColor Green
+Write-Host "[OK] Fingerprint Credential Provider unregistered successfully." -ForegroundColor Green

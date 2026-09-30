@@ -1,43 +1,166 @@
-# Visual Studio / MSBuild
+﻿# =============================================================
+#  Fingerprint Phone Unlock — .gitignore
+#  SECURITY: This project handles credentials and crypto keys.
+#  Review carefully before committing ANY new file.
+# =============================================================
+
+# -------------------------------------------------------
+# CRITICAL SECURITY — NEVER COMMIT THESE
+# -------------------------------------------------------
+# Windows DPAPI encrypted vault (contains encrypted credentials)
+vault.dat
+*.dat
+
+# Android signing keys
+*.keystore
+*.jks
+*.p12
+*.pfx
+
+# Any generic secret / credential files
+*.credentials
+*.secret
+*.secrets
+.env
+.env.*
+appsettings.*.json
+!appsettings.json
+secrets.json
+user-secrets.json
+
+# Android SDK local paths (contains machine-specific SDK path)
+local.properties
+
+# -------------------------------------------------------
+# WINDOWS — Visual Studio / MSBuild Build Outputs
+# -------------------------------------------------------
 [Bb]in/
 [Oo]bj/
 [Dd]ebug/
 [Rr]elease/
 x64/
 x86/
+ARM/
+ARM64/
+[Ww][Ii][Nn]32/
+
+# VS IDE files
+.vs/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
-.vs/
+*.userprefs
+
+# Build logs and artifacts
+UpgradeLog.*
+*.log
+BuildOutput/
+
+# C++ compiled outputs
 *.pdb
 *.exp
 *.lib
-*.tlog
-*.lastbuildstate
+*.ilk
 *.iobj
 *.ipdb
+*.tlog
+*.lastbuildstate
+*.recipe
+*.obj
+*.res
+*.dll.embed.manifest
 
-# DPAPI Vault & Local Secret Storage (CRITICAL - NEVER COMMIT)
-vault.dat
-*.dat
-*.credentials
-appsettings.Development.json
+# -------------------------------------------------------
+# WINDOWS — .NET / NuGet
+# -------------------------------------------------------
+# NuGet packages (restore from nuget.org)
+packages/
+*.nupkg
+*.snupkg
+nuget.config
+project.lock.json
+project.fragment.lock.json
+artifacts/
 
-# Android / Gradle
+# .NET publish output
+publish/
+**/Properties/PublishProfiles/
+
+# -------------------------------------------------------
+# ANDROID — Gradle / Android Studio
+# -------------------------------------------------------
+# Gradle build outputs and caches
 .gradle/
 build/
 */build/
-local.properties
+**/build/
+
+# Android generated files
 *.apk
 *.aab
 *.ap_
 *.dex
+gen/
+out/
+
+# Android Studio IDE
 .idea/
 *.iml
-.DS_Store
-*.keystore
-*.jks
+*.iws
+*.ipr
+local.properties
+android.iml
 
-# Logs
-*.log
+# Proguard
+proguard/
+
+# -------------------------------------------------------
+# OPERATING SYSTEM FILES
+# -------------------------------------------------------
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# -------------------------------------------------------
+# EDITORS & TOOLS
+# -------------------------------------------------------
+# VSCode
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+# Do NOT commit launch.json (may contain env vars)
+.vscode/launch.json
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# Vim / Emacs swap files
+*.swp
+*.swo
+*~
+\#*\#
