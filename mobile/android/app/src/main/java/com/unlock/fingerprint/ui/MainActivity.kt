@@ -55,7 +55,7 @@ class MainActivity : AppCompatActivity() {
         // Initialize hardware key
         KeyStoreManager.getOrCreateHardwareKeyPair()
 
-        bleManager = BleClientManager(this)
+        bleManager = BleClientManager.getInstance(this)
         biometricHelper = BiometricPromptHelper(
             this,
             onAuthSuccess = { signature ->

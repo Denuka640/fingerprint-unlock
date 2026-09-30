@@ -45,9 +45,13 @@ class PairingActivity : AppCompatActivity() {
 
         txtPairingInfo = findViewById(R.id.txtPairingInfo)
         btnScanQr = findViewById(R.id.btnScanQr)
-        bleManager = BleClientManager(this)
+        bleManager = BleClientManager.getInstance(this)
 
         btnScanQr.setOnClickListener {
+            if (!bleManager.isConnected()) {
+                Toast.makeText(this, "Not connected to PC. Return to main screen and wait for 'Ready to Unlock'.", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
             val options = ScanOptions().apply {
                 setDesiredBarcodeFormats(ScanOptions.QR_CODE)
                 setPrompt("Point camera at Laptop Setup App QR code")

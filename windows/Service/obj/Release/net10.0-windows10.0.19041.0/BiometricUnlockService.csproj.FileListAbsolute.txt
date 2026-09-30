@@ -50,3 +50,4 @@ D:\visual studio projects\fingerprint unlock\windows\Service\obj\Release\net10.0
 D:\visual studio projects\fingerprint unlock\windows\Service\obj\Release\net10.0-windows10.0.19041.0\BiometricUnlockService.pdb
 D:\visual studio projects\fingerprint unlock\windows\Service\obj\Release\net10.0-windows10.0.19041.0\BiometricUnlockService.genruntimeconfig.cache
 D:\visual studio projects\fingerprint unlock\windows\Service\obj\Release\net10.0-windows10.0.19041.0\ref\BiometricUnlockService.dll
+D:\visual studio projects\fingerprint unlock\windows\Service\obj\Release\net10.0-windows10.0.19041.0\BiometricUnlockService.sourcelink.json

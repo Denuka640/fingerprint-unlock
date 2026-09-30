@@ -20,5 +20,5 @@ if (-not (Test-Path $dllPath)) {
 Write-Host "Registering Credential Provider COM DLL: $dllPath" -ForegroundColor Cyan
 & regsvr32.exe /s "$dllPath"
 
-Write-Host "✓ Fingerprint Credential Provider registered successfully!" -ForegroundColor Green
+Write-Host "[OK] Fingerprint Credential Provider registered successfully!" -ForegroundColor Green
 Write-Host "You will see 'Phone Fingerprint Unlock' tile on your lock screen (Win + L)." -ForegroundColor Yellow

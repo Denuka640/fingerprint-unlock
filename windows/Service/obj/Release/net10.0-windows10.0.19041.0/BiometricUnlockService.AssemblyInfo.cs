@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BiometricUnlockService")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0df308cce16ef221f8aa7c106831f7e1e1fdd63f")]
 [assembly: System.Reflection.AssemblyProductAttribute("BiometricUnlockService")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BiometricUnlockService")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

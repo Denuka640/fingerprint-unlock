@@ -31,4 +31,4 @@ Write-Host "Creating Windows Service '$serviceName'..." -ForegroundColor Cyan
 & sc.exe create $serviceName binPath= "`"$exePath`" --service" start= auto DisplayName= "Biometric Phone Unlock Service"
 & sc.exe start $serviceName
 
-Write-Host "✓ Windows Service installed and started successfully!" -ForegroundColor Green
+Write-Host "[OK] Windows Service installed and started successfully!" -ForegroundColor Green

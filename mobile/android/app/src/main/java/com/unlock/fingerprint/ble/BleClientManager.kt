@@ -15,7 +15,8 @@ import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 @SuppressLint("MissingPermission")
-class BleClientManager(private val context: Context) {
+class BleClientManager private constructor(private val context: Context) {
+
 
     companion object {
         val SERVICE_UUID: UUID = UUID.fromString("7B37A55C-3BF2-4D3E-A59B-51421DA10001")
@@ -25,6 +26,15 @@ class BleClientManager(private val context: Context) {
         val PAIRING_CHAR_UUID: UUID = UUID.fromString("7B37A55C-3BF2-4D3E-A59B-51421DA10005")
 
         private const val TAG = "BleClientManager"
+
+        // Singleton so PairingActivity reuses the connected instance from MainActivity
+        @Volatile private var _instance: BleClientManager? = null
+
+        fun getInstance(context: Context): BleClientManager {
+            return _instance ?: synchronized(this) {
+                _instance ?: BleClientManager(context.applicationContext).also { _instance = it }
+            }
+        }
     }
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -100,9 +110,28 @@ class BleClientManager(private val context: Context) {
             status: Int
         ) {
             if (status == BluetoothGatt.GATT_SUCCESS && characteristic.uuid == CHALLENGE_CHAR_UUID) {
-                val data = characteristic.value
+                // Use deprecated API only for SDK < 33; use new API on Android 13+
+                @Suppress("DEPRECATION")
+                val data = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    characteristic.value // value is populated in legacy callback path
+                } else {
+                    characteristic.value
+                }
                 currentChallenge = data
                 onChallengeReceived?.invoke(data)
+            }
+        }
+
+        // Android 13+ (API 33) new callback signature with value parameter
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
+            status: Int
+        ) {
+            if (status == BluetoothGatt.GATT_SUCCESS && characteristic.uuid == CHALLENGE_CHAR_UUID) {
+                currentChallenge = value
+                onChallengeReceived?.invoke(value)
             }
         }
 
@@ -173,6 +202,8 @@ class BleClientManager(private val context: Context) {
         char.value = baos.toByteArray()
         bluetoothGatt?.writeCharacteristic(char)
     }
+
+    fun isConnected(): Boolean = bluetoothGatt != null
 
     fun disconnect() {
         bluetoothGatt?.disconnect()
