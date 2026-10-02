@@ -131,7 +131,23 @@ class MainActivity : AppCompatActivity() {
             currentChallenge?.let {
                 biometricHelper.showBiometricPrompt(it)
             } ?: run {
-                bleManager.requestChallenge()
+                // Check WiFi connection first
+                lifecycleScope.launch {
+                    txtStatus.text = "Requesting unlock via WiFi..."
+                    val challengeBytes = tcpManager.getChallenge()
+                    if (challengeBytes != null) {
+                        currentChallenge = challengeBytes
+                        runOnUiThread {
+                            txtStatus.text = "Challenge Received via WiFi"
+                            biometricHelper.showBiometricPrompt(challengeBytes)
+                        }
+                    } else {
+                        runOnUiThread {
+                            txtStatus.text = "WiFi failed. Trying BLE..."
+                            bleManager.requestChallenge()
+                        }
+                    }
+                }
             }
         }
 
