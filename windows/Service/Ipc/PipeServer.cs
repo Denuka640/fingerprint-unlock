@@ -53,9 +53,12 @@ public class PipeServer : IDisposable
             try
             {
                 var pipeSecurity = new PipeSecurity();
-                // Allow LocalSystem, Administrators, and Authenticated Users (LogonUI runs as SYSTEM or User)
-                var sidWorld = new SecurityIdentifier(WellKnownSidType.WorldSid, null);
-                pipeSecurity.AddAccessRule(new PipeAccessRule(sidWorld, PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
+                // Security Audit Fix: Only allow LocalSystem and Administrators to connect to the pipe.
+                // LogonUI.exe runs as SYSTEM. This prevents local malware from stealing the plaintext password.
+                var sidSystem = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+                var sidAdmins = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+                pipeSecurity.AddAccessRule(new PipeAccessRule(sidSystem, PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
+                pipeSecurity.AddAccessRule(new PipeAccessRule(sidAdmins, PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
 
                 var serverStream = NamedPipeServerStreamAcl.Create(
                     PipeName,
