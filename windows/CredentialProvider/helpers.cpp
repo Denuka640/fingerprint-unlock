@@ -135,10 +135,10 @@ HRESULT WaitForPipeUnlock(
     HANDLE hPipe = CreateFileW(
         BIOMETRIC_PIPE_NAME,
         GENERIC_READ | GENERIC_WRITE,
-        FILE_FLAG_OVERLAPPED,
-        nullptr,
+        0, // dwShareMode
+        nullptr, // lpSecurityAttributes
         OPEN_EXISTING,
-        0,
+        FILE_FLAG_OVERLAPPED, // dwFlagsAndAttributes
         nullptr
     );
 
