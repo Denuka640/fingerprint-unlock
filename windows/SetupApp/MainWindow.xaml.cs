@@ -47,8 +47,23 @@ public partial class MainWindow : Window
     {
         try
         {
-            var host = Dns.GetHostEntry(Dns.GetHostName());
-            var ipAddress = host.AddressList.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork)?.ToString() ?? "127.0.0.1";
+            string ipAddress = "127.0.0.1";
+            try
+            {
+                using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
+                {
+                    socket.Connect("8.8.8.8", 65530);
+                    if (socket.LocalEndPoint is IPEndPoint endPoint)
+                    {
+                        ipAddress = endPoint.Address.ToString();
+                    }
+                }
+            }
+            catch
+            {
+                var host = Dns.GetHostEntry(Dns.GetHostName());
+                ipAddress = host.AddressList.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork)?.ToString() ?? "127.0.0.1";
+            }
 
             var pairingPayload = new
             {

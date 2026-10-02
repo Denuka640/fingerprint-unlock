@@ -59,6 +59,10 @@ if ($existing) {
 }
 
 New-Service -Name $serviceName -BinaryPathName "`"$exePath`" --service" -DisplayName "Biometric Phone Unlock Service" -Description "Manages BLE GATT advertising and biometric credential verification for phone-based Windows unlock." -StartupType Automatic -ErrorAction Stop | Out-Null
+
+Write-Host "Configuring Windows Firewall to allow WiFi TCP Port 9898..." -ForegroundColor Yellow
+netsh advfirewall firewall add rule name="BiometricUnlock WiFi Port 9898" dir=in action=allow protocol=TCP localport=9898 | Out-Null
+
 Start-Service -Name $serviceName -ErrorAction Stop
 Write-Host "Service installed and started successfully!" -ForegroundColor Green
 
