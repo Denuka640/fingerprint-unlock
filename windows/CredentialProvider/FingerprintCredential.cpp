@@ -200,7 +200,7 @@ IFACEMETHODIMP FingerprintCredential::GetFieldState(
         *pcpfis = CPFIS_NONE;
         break;
     case FID_STATUS_TEXT:
-        *pcpfs = CPFS_DISPLAY_IN_SELECTED_TILE;
+        *pcpfs = CPFS_DISPLAY_IN_BOTH;
         *pcpfis = CPFIS_NONE;
         break;
     case FID_SUBMIT_BUTTON:

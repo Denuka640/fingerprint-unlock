@@ -112,7 +112,16 @@ public partial class MainWindow : Window
             return;
         }
 
-        _vault.SaveUserCredentials(TxtUsername.Text.Trim(), TxtDomain.Text.Trim(), TxtPassword.Password);
+        string domain = TxtDomain.Text.Trim();
+        string username = TxtUsername.Text.Trim();
+        
+        // If it looks like a Microsoft Account email, force a blank domain so LSA routes it properly.
+        if (username.Contains("@"))
+        {
+            domain = "";
+        }
+
+        _vault.SaveUserCredentials(username, domain, TxtPassword.Password);
         TxtCredsStatus.Text = "✓ Saved securely to DPAPI Vault";
     }
 
