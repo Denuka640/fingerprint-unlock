@@ -12,6 +12,15 @@ if (-not $isAdmin) {
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Write-Host "Starting Unified Installation..." -ForegroundColor Cyan
 
+# 0. Stop existing service to free up file locks before building
+$serviceName = "BiometricUnlockService"
+$existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+if ($existing) {
+    Write-Host "Stopping existing service to allow build..." -ForegroundColor Yellow
+    Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+}
+
 # 1. Build the .NET Projects (Service & SetupApp)
 Write-Host "Building Windows Service & Setup App (Release)..." -ForegroundColor Yellow
 Set-Location -Path "$scriptDir"
@@ -43,12 +52,8 @@ if ($LASTEXITCODE -ne 0) {
 # 3. Install the Windows Service
 Write-Host "Installing Background Service..." -ForegroundColor Yellow
 $exePath = [System.IO.Path]::GetFullPath("$scriptDir\Service\bin\Release\net10.0-windows10.0.19041.0\BiometricUnlockService.exe")
-$serviceName = "BiometricUnlockService"
 
-$existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if ($existing) {
-    Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
     & sc.exe delete $serviceName | Out-Null
     Start-Sleep -Seconds 2
 }
