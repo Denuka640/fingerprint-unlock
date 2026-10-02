@@ -3,6 +3,9 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using QRCoder;
+using System.Net;
+using System.Net.Sockets;
+using System.Linq;
 using BiometricUnlock.Service.Bluetooth;
 using BiometricUnlock.Service.Ipc;
 using BiometricUnlock.Service.Security;
@@ -44,10 +47,15 @@ public partial class MainWindow : Window
     {
         try
         {
+            var host = Dns.GetHostEntry(Dns.GetHostName());
+            var ipAddress = host.AddressList.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork)?.ToString() ?? "127.0.0.1";
+
             var pairingPayload = new
             {
-                Version = 1,
+                Version = 2,
                 MachineName = Environment.MachineName,
+                IPAddress = ipAddress,
+                Port = 9898,
                 ServiceUuid = BleGattServerManager.ServiceUuid.ToString(),
                 StatusChar = BleGattServerManager.StatusCharUuid.ToString(),
                 ChallengeChar = BleGattServerManager.ChallengeCharUuid.ToString(),

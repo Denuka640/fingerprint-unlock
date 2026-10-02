@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
 
     private lateinit var bleManager: BleClientManager
+    private lateinit var tcpManager: com.unlock.fingerprint.network.TcpClientManager
     private lateinit var biometricHelper: BiometricPromptHelper
 
     private lateinit var txtStatus: TextView
@@ -56,13 +57,31 @@ class MainActivity : AppCompatActivity() {
         KeyStoreManager.getOrCreateHardwareKeyPair()
 
         bleManager = BleClientManager.getInstance(this)
+        tcpManager = com.unlock.fingerprint.network.TcpClientManager.getInstance(this)
+        
+        // Load saved IP
+        val prefs = getSharedPreferences("UnlockPrefs", MODE_PRIVATE)
+        tcpManager.currentIpAddress = prefs.getString("PC_IP_ADDRESS", null)
+
         biometricHelper = BiometricPromptHelper(
             this,
             onAuthSuccess = { signature ->
                 currentChallenge?.let { challenge ->
-                    bleManager.sendBiometricAuthResponse(signature, challenge)
-                    runOnUiThread {
-                        txtStatus.text = "Fingerprint Verified! Unlocking PC..."
+                    val deviceId = Build.MODEL ?: "AndroidPhone"
+                    lifecycleScope.launch {
+                        val success = tcpManager.sendUnlockAuth(deviceId, signature, challenge)
+                        if (success) {
+                            runOnUiThread {
+                                txtStatus.text = "✓ Laptop Unlocked Successfully via WiFi!"
+                                Toast.makeText(this@MainActivity, "✓ Laptop Unlocked Successfully!", Toast.LENGTH_LONG).show()
+                            }
+                        } else {
+                            // Fallback to BLE
+                            bleManager.sendBiometricAuthResponse(signature, challenge)
+                            runOnUiThread {
+                                txtStatus.text = "Fingerprint Verified! Unlocking PC via BLE..."
+                            }
+                        }
                     }
                 }
             },
@@ -89,7 +108,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnScan.setOnClickListener {
-            checkAndRequestPermissions()
+            // Check WiFi connection first
+            lifecycleScope.launch {
+                txtStatus.text = "Checking WiFi connection..."
+                val challengeBytes = tcpManager.getChallenge()
+                if (challengeBytes != null) {
+                    currentChallenge = challengeBytes
+                    runOnUiThread {
+                        txtStatus.text = "Challenge Received via WiFi"
+                        biometricHelper.showBiometricPrompt(challengeBytes)
+                    }
+                } else {
+                    runOnUiThread {
+                        txtStatus.text = "WiFi failed. Scanning BLE..."
+                        checkAndRequestPermissions()
+                    }
+                }
+            }
         }
 
         btnUnlock.setOnClickListener {

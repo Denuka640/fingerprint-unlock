@@ -32,6 +32,7 @@ public class Program
         builder.Services.AddSingleton<DpapiVault>();
         builder.Services.AddSingleton<PipeServer>();
         builder.Services.AddSingleton<BleGattServerManager>();
+        builder.Services.AddSingleton<BiometricUnlock.Service.Network.LocalNetworkManager>();
 
         builder.Services.AddHostedService<BiometricBackgroundWorker>();
 
