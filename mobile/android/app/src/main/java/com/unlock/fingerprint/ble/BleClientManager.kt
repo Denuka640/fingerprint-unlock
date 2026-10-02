@@ -54,12 +54,23 @@ class BleClientManager private constructor(private val context: Context) {
     var onPairingFailed: ((String) -> Unit)? = null
 
     private var isScanning = false
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
 
     fun startScan() {
         if (isScanning || bluetoothGatt != null) return
         val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
         _connectionState.value = "Scanning for PC..."
         isScanning = true
+
+        // Timeout scan after 12 seconds
+        handler.postDelayed({
+            if (isScanning) {
+                isScanning = false
+                scanner.stopScan(scanCallback)
+                _connectionState.value = "Scan Timeout - PC not found"
+                onPairingFailed?.invoke("Scan Timeout - Unpair from Windows Settings if already paired!")
+            }
+        }, 12000)
 
         val filter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(SERVICE_UUID))
@@ -77,9 +88,11 @@ class BleClientManager private constructor(private val context: Context) {
             _rssiValue.value = result.rssi
             Log.d(TAG, "Discovered PC BLE device: ${result.device.address}, RSSI: ${result.rssi}")
             
-            isScanning = false
-            bluetoothAdapter?.bluetoothLeScanner?.stopScan(this)
-            connectToDevice(result.device)
+            if (isScanning) {
+                isScanning = false
+                bluetoothAdapter?.bluetoothLeScanner?.stopScan(this)
+                connectToDevice(result.device)
+            }
         }
 
         override fun onScanFailed(errorCode: Int) {
