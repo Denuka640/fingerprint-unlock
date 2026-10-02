@@ -97,10 +97,12 @@ public partial class MainWindow : Window
         {
             int val = (int)e.NewValue;
             TxtRssiValue.Text = $"{val} dBm";
-
-            var config = _vault.LoadConfig();
-            config.RssiThreshold = val;
-            _vault.SaveConfig(config);
+            if (_vault != null)
+            {
+                var config = _vault.LoadConfig();
+                config.RssiThreshold = val;
+                _vault.SaveConfig(config);
+            }
         }
     }
 
