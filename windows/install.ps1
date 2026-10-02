@@ -15,9 +15,15 @@ Write-Host "Starting Unified Installation..." -ForegroundColor Cyan
 # 1. Build the .NET Projects (Service & SetupApp)
 Write-Host "Building Windows Service & Setup App (Release)..." -ForegroundColor Yellow
 Set-Location -Path "$scriptDir"
-& dotnet build -c Release
+& dotnet build "$scriptDir\Service\BiometricUnlockService.csproj" -c Release
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Failed to build .NET projects."
+    Write-Error "Failed to build Service project."
+    Exit 1
+}
+
+& dotnet build "$scriptDir\SetupApp\BiometricSetupApp.csproj" -c Release
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to build SetupApp project."
     Exit 1
 }
 
