@@ -54,10 +54,14 @@ class BiometricPromptHelper(
         )
 
         // Initialize hardware signature
-        val uninitializedSignature = KeyStoreManager.initSignatureForSigning()
-        biometricPrompt.authenticate(
-            promptInfo,
-            BiometricPrompt.CryptoObject(uninitializedSignature)
-        )
+        try {
+            val uninitializedSignature = KeyStoreManager.initSignatureForSigning()
+            biometricPrompt.authenticate(
+                promptInfo,
+                BiometricPrompt.CryptoObject(uninitializedSignature)
+            )
+        } catch (e: Exception) {
+            onAuthError("Key error: ${e.message}. Please restart app or re-pair.")
+        }
     }
 }

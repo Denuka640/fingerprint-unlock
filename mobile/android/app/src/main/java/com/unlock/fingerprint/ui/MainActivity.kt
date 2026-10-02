@@ -130,6 +130,7 @@ class MainActivity : AppCompatActivity() {
         btnUnlock.setOnClickListener {
             currentChallenge?.let {
                 biometricHelper.showBiometricPrompt(it)
+                currentChallenge = null
             } ?: run {
                 // Check WiFi connection first
                 lifecycleScope.launch {
