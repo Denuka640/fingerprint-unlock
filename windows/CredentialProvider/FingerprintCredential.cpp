@@ -7,6 +7,8 @@ FingerprintCredential::FingerprintCredential() :
     _cpus(CPUS_INVALID),
     _dwAuthPackage(0),
     _pCredEvents(nullptr),
+    _pProviderEvents(nullptr),
+    _upProviderContext(0),
     _pszUserSid(nullptr),
     _bAutoLogonReady(FALSE),
     _hListenerThread(nullptr),
@@ -49,6 +51,11 @@ FingerprintCredential::~FingerprintCredential()
     {
         CoTaskMemFree(_pszUserSid);
         _pszUserSid = nullptr;
+    }
+    if (_pProviderEvents)
+    {
+        _pProviderEvents->Release();
+        _pProviderEvents = nullptr;
     }
 
     DeleteCriticalSection(&_cs);
@@ -116,6 +123,14 @@ IFACEMETHODIMP FingerprintCredential::Advise(_In_ ICredentialProviderCredentialE
     {
         _pCredEvents->AddRef();
     }
+
+    // Start background pipe listener immediately so we catch unlock signals
+    // without requiring the user to manually click the tile
+    if (!_hListenerThread)
+    {
+        _hCancelEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        _hListenerThread = CreateThread(nullptr, 0, BackgroundListenerThread, this, 0, nullptr);
+    }
     LeaveCriticalSection(&_cs);
     return S_OK;
 }
@@ -135,14 +150,11 @@ IFACEMETHODIMP FingerprintCredential::UnAdvise()
 IFACEMETHODIMP FingerprintCredential::SetSelected(_Out_ BOOL* pbAutoLogon)
 {
     if (!pbAutoLogon) return E_INVALIDARG;
-    *pbAutoLogon = FALSE;
 
     EnterCriticalSection(&_cs);
-    if (!_hListenerThread)
-    {
-        _hCancelEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        _hListenerThread = CreateThread(nullptr, 0, BackgroundListenerThread, this, 0, nullptr);
-    }
+    // If credentials are already ready (phone unlocked before tile was selected),
+    // trigger auto-logon immediately
+    *pbAutoLogon = _bAutoLogonReady;
     LeaveCriticalSection(&_cs);
 
     return S_OK;
@@ -384,6 +396,22 @@ void FingerprintCredential::UpdateStatusText(PCWSTR status)
     LeaveCriticalSection(&_cs);
 }
 
+void FingerprintCredential::SetProviderEvents(ICredentialProviderEvents* pEvents, UINT_PTR upContext)
+{
+    EnterCriticalSection(&_cs);
+    if (_pProviderEvents)
+    {
+        _pProviderEvents->Release();
+    }
+    _pProviderEvents = pEvents;
+    _upProviderContext = upContext;
+    if (_pProviderEvents)
+    {
+        _pProviderEvents->AddRef();
+    }
+    LeaveCriticalSection(&_cs);
+}
+
 void FingerprintCredential::TriggerUnlock(PCWSTR username, PCWSTR domain, PCWSTR password)
 {
     EnterCriticalSection(&_cs);
@@ -396,6 +424,12 @@ void FingerprintCredential::TriggerUnlock(PCWSTR username, PCWSTR domain, PCWSTR
     {
         _pCredEvents->SetFieldString(this, FID_STATUS_TEXT, L"Unlocking...");
         _pCredEvents->SetFieldSubmitButton(this, FID_SUBMIT_BUTTON, FID_STATUS_TEXT);
+    }
+    
+    if (_pProviderEvents)
+    {
+        // Tell LogonUI to re-poll GetCredentialCount which will now return auto-logon = TRUE
+        _pProviderEvents->CredentialsChanged(_upProviderContext);
     }
     LeaveCriticalSection(&_cs);
 }

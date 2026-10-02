@@ -131,6 +131,10 @@ IFACEMETHODIMP FingerprintCredentialProvider::Advise(
     {
         _pEvents->AddRef();
     }
+    if (_pCredential)
+    {
+        _pCredential->SetProviderEvents(_pEvents, _upAdviseContext);
+    }
     LeaveCriticalSection(&_cs);
     return S_OK;
 }
@@ -144,6 +148,10 @@ IFACEMETHODIMP FingerprintCredentialProvider::UnAdvise()
         _pEvents = nullptr;
     }
     _upAdviseContext = 0;
+    if (_pCredential)
+    {
+        _pCredential->SetProviderEvents(nullptr, 0);
+    }
     LeaveCriticalSection(&_cs);
     return S_OK;
 }
@@ -200,6 +208,12 @@ IFACEMETHODIMP FingerprintCredentialProvider::GetCredentialCount(
     {
         *pdwCount = 1;
         *pdwDefault = 0;
+        
+        // If the credential has already received an unlock trigger via the background listener,
+        // we can tell LogonUI to auto-logon immediately with this default.
+        BOOL bAutoLogon = FALSE;
+        _pCredential->SetSelected(&bAutoLogon);
+        *pbAutoLogonWithDefault = bAutoLogon;
     }
 
     return S_OK;
@@ -260,6 +274,10 @@ HRESULT FingerprintCredentialProvider::_CreateCredentials()
         }
 
         _pCredential->Initialize(_cpus, pszSid, _dwAuthPackage);
+        if (_pEvents)
+        {
+            _pCredential->SetProviderEvents(_pEvents, _upAdviseContext);
+        }
         if (pszSid)
         {
             CoTaskMemFree(pszSid);

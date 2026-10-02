@@ -3,8 +3,10 @@ package com.unlock.fingerprint.ui
 import android.os.Build
 import android.os.Bundle
 import android.widget.Button
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -24,17 +26,37 @@ class PairingActivity : AppCompatActivity() {
             try {
                 val json = JSONObject(result.contents)
                 val machineName = json.optString("MachineName", "Windows PC")
-                txtPairingInfo.text = "Pairing with $machineName..."
+                txtPairingInfo.text = "Sending pairing data to $machineName..."
+                btnScanQr.isEnabled = false
 
                 val pubKeyDer = KeyStoreManager.getPublicKeyDer()
                 val deviceId = Build.MODEL ?: "AndroidPhone"
                 val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}"
 
+                // Set up callbacks BEFORE sending data
+                bleManager.onPairingSuccess = {
+                    runOnUiThread {
+                        txtPairingInfo.text = "✓ Successfully paired with $machineName!"
+                        Toast.makeText(this, "✓ Paired with $machineName!", Toast.LENGTH_LONG).show()
+                        btnScanQr.isEnabled = true
+                        // Delay finish so user can see the success message
+                        txtPairingInfo.postDelayed({ finish() }, 1500)
+                    }
+                }
+
+                bleManager.onPairingFailed = { error ->
+                    runOnUiThread {
+                        txtPairingInfo.text = "✗ Pairing failed: $error"
+                        Toast.makeText(this, "Pairing failed: $error", Toast.LENGTH_LONG).show()
+                        btnScanQr.isEnabled = true
+                    }
+                }
+
                 bleManager.sendPairingData(deviceId, deviceName, pubKeyDer)
-                Toast.makeText(this, "Pairing packet sent to $machineName!", Toast.LENGTH_LONG).show()
-                finish()
+
             } catch (e: Exception) {
                 Toast.makeText(this, "Invalid QR code format: ${e.message}", Toast.LENGTH_LONG).show()
+                btnScanQr.isEnabled = true
             }
         }
     }
@@ -60,5 +82,12 @@ class PairingActivity : AppCompatActivity() {
             }
             qrLauncher.launch(options)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Clean up callbacks to avoid leaks
+        bleManager.onPairingSuccess = null
+        bleManager.onPairingFailed = null
     }
 }

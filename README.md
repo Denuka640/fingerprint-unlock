@@ -1,77 +1,82 @@
-# Secure Bluetooth Biometric Phone Unlock for Windows
+# 📱 Biometric Fingerprint Unlock for Windows
 
-A complete software solution that enables unlocking your Windows laptop/PC using the fingerprint sensor of your smartphone over Bluetooth Low Energy (BLE), featuring custom lock screen integration and security mitigations against replay attacks, relay attacks, and credential exposure.
+Unlock your Windows PC seamlessly using your Android smartphone's fingerprint scanner. This project consists of an Android application (acting as the authenticator) and a Windows service/credential provider (acting as the lock screen receiver).
 
----
-
-## Architecture Overview
-
-```
-┌───────────────────────────┐                ┌──────────────────────────┐
-│   Smartphone (Android)    │                │      Windows 10/11       │
-│                           │                │                          │
-│  [BiometricPrompt / TEE]  │                │   [Windows Lock Screen]  │
-│             │             │                │  (Credential Provider)   │
-│    Hardware ECDSA P-256   │                │            ▲             │
-│       Signature           │                │            │ Named Pipe  │
-│             │             │   BLE GATT     │            ▼             │
-│    [BLE Client Manager]   │───────────────>│  [Biometric Windows Svc] │
-│                           │ (Encrypted)    │  (DPAPI Vault / Crypto)  │
-└───────────────────────────┘                └──────────────────────────┘
-```
+## 🚀 Features
+- **True Auto-Unlock**: No need to touch your mouse or keyboard! Simply authenticate on your phone and Windows unlocks instantly.
+- **Hardware-backed Security**: Private keys are stored in your Android device's hardware keystore (TEE).
+- **Secure Encrypted Pairing**: ECDH P-256 Key Exchange and AES-256-GCM encryption ensure your credentials are never intercepted.
+- **Zero Internet Required**: Operates entirely over local Bluetooth Low Energy (BLE).
+- **DPAPI Credential Vault**: Windows credentials never leave your machine; they are encrypted using Windows Data Protection API (DPAPI) and unlocked via your phone's biometric signature.
 
 ---
 
-## Security Mitigations & Threat Model
+## 🛠️ Components
 
-1. **Zero Plaintext Transmission**: Passwords and raw biometric data are never transmitted over Bluetooth.
-2. **Hardware Key Isolation**: Android Keystore generates an ECDSA P-256 key pair backed by hardware (StrongBox / TEE) configured with `setUserAuthenticationRequired(true)`. The private key cannot sign anything without physical biometric confirmation.
-3. **Replay Attack Defense**: PC generates a cryptographically secure 256-bit random nonce (`BCryptGenRandom`) with a 15-second TTL. Duplicate signatures or expired nonces are discarded.
-4. **Relay & Distance Protection**: Signal strength (RSSI) proximity filtering ensures the user's phone is physically close to the laptop.
-5. **Windows Credential Protection**: Windows login tokens and paired public keys are encrypted locally using **Windows DPAPI** (`DataProtectionScope.LocalMachine`).
-
----
-
-## Project Structure
-
-- `windows/CredentialProvider/`: Native 64-bit C++ COM DLL implementing `ICredentialProvider` and `ICredentialProviderCredential2` that renders the custom biometric tile on Windows LogonUI.
-- `windows/Service/`: Windows Background Service (.NET 10) managing Bluetooth BLE GATT server, cryptographic challenge validation, DPAPI storage, and IPC named pipes.
-- `windows/SetupApp/`: Modern WPF desktop companion app for entering DPAPI credentials, displaying pairing QR codes, adjusting RSSI proximity, and managing paired phones.
-- `windows/scripts/`: Administrative PowerShell scripts for registering/unregistering the Credential Provider DLL and installing the Windows Service.
-- `mobile/android/`: Complete Android application (Kotlin) with AndroidX `BiometricPrompt`, BLE GATT client, and Keystore hardware binding.
+1. **Mobile App (Android)**: Connects to the PC via BLE, receives a cryptographic challenge, signs it using the hardware keystore (upon successful biometric prompt), and sends the response.
+2. **Background Service (Windows)**: A `.NET 10` Windows Service that acts as a BLE GATT Server. It verifies the phone's signature against the paired public key.
+3. **Setup App (Windows)**: A WPF application used for pairing the phone (via QR Code) and securely saving your Windows credentials.
+4. **Credential Provider (Windows)**: A custom C++ COM DLL injected into `LogonUI.exe` that listens for unlock signals from the Background Service and performs the interactive logon.
 
 ---
 
-## Setup & Quick Start Guide
+## 📖 Installation Instructions
 
-### 1. Register the Windows Credential Provider (Lock Screen Tile)
-Open PowerShell as **Administrator** and run:
-```powershell
-.\windows\scripts\register_provider.ps1
-```
-*Note: Your regular password/PIN options remain completely available on the lock screen alongside the biometric tile.*
+### 1. Windows Installation (The Receiver)
 
-### 2. Configure Windows Unlock Credentials
-Launch the **Biometric Unlock Setup** app:
-```powershell
-dotnet run --project windows\SetupApp\BiometricSetupApp.csproj
-```
-1. Enter your Windows Username and Password (saved locally in Windows DPAPI).
-2. The app will generate a secure **Pairing QR Code**.
+We've provided a unified installer script that handles building and registering all components automatically.
 
-### 3. Install & Start the Windows Service
-Run as **Administrator**:
-```powershell
-.\windows\scripts\install_service.ps1
-```
-Or run interactively in a console:
-```powershell
-dotnet run --project windows\Service\BiometricUnlockService.csproj
-```
+1. Open **PowerShell as Administrator**.
+2. Navigate to the `windows` directory:
+   ```powershell
+   cd "D:\visual studio projects\fingerprint unlock\windows"
+   ```
+3. Run the installer script:
+   ```powershell
+   .\install.ps1
+   ```
+4. The installer will build the projects, register the background service, register the credential provider, and create shortcuts on your Desktop and Start Menu.
 
-### 4. Pair Your Phone & Unlock
-1. Open the **Biometric Unlock** app on your Android smartphone.
-2. Tap **Pair PC** and scan the QR code from the Setup App.
-3. Lock your PC (`Win + L`).
-4. Select the **Phone Fingerprint Unlock** tile.
-5. Touch your fingerprint sensor on your phone — Windows will immediately unlock!
+### 2. Android Installation (The Key)
+
+1. Build the APK using Android Studio or Gradle:
+   ```bash
+   cd mobile/android
+   gradlew assembleDebug
+   ```
+2. Install the generated APK on your Android phone.
+3. Ensure Bluetooth and Location permissions are granted.
+
+---
+
+## 🔗 Setup & Pairing Guide
+
+1. Open **Biometric Setup** from your Desktop shortcut on Windows.
+2. Enter your Windows Username, Domain/Machine Name, and Password. Click **Save to Secure DPAPI Vault**.
+3. On your Android phone, open the **Fingerprint Unlock** app.
+4. Tap the **Pair** button in the mobile app.
+5. Scan the QR code displayed on the Windows Setup App.
+6. The app will confirm pairing and the PC will save the phone's public key.
+
+---
+
+## 🔓 Usage (How to unlock)
+
+1. Lock your Windows PC by pressing `Win + L`.
+2. Ensure your phone's Bluetooth is on and open the mobile app.
+3. The app will automatically connect to your locked PC and present a fingerprint prompt.
+4. Scan your fingerprint on your phone.
+5. Watch your Windows PC unlock automatically!
+
+---
+
+## 🧹 Uninstallation
+
+To completely remove the service, credential provider, and shortcuts:
+1. Open **PowerShell as Administrator**.
+2. Run the uninstaller:
+   ```powershell
+   cd "D:\visual studio projects\fingerprint unlock\windows"
+   .\uninstall.ps1
+   ```
+3. It will prompt you if you wish to wipe the securely stored credentials.

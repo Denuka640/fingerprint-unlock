@@ -62,6 +62,7 @@ public:
 
     void TriggerUnlock(PCWSTR username, PCWSTR domain, PCWSTR password);
     void UpdateStatusText(PCWSTR status);
+    void SetProviderEvents(ICredentialProviderEvents* pEvents, UINT_PTR upContext);
 
 private:
     static DWORD WINAPI BackgroundListenerThread(LPVOID lpParam);
@@ -70,6 +71,8 @@ private:
     CREDENTIAL_PROVIDER_USAGE_SCENARIO _cpus;
     DWORD _dwAuthPackage;
     ICredentialProviderCredentialEvents* _pCredEvents;
+    ICredentialProviderEvents* _pProviderEvents;
+    UINT_PTR _upProviderContext;
 
     WCHAR _szStatus[256];
     WCHAR _szUsername[128];

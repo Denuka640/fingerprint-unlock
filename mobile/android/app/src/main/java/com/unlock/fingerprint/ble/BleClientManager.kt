@@ -50,6 +50,8 @@ class BleClientManager private constructor(private val context: Context) {
     private var currentChallenge: ByteArray? = null
     var onChallengeReceived: ((ByteArray) -> Unit)? = null
     var onUnlockSuccess: (() -> Unit)? = null
+    var onPairingSuccess: (() -> Unit)? = null
+    var onPairingFailed: ((String) -> Unit)? = null
 
     fun startScan() {
         val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
@@ -140,9 +142,20 @@ class BleClientManager private constructor(private val context: Context) {
             characteristic: BluetoothGattCharacteristic,
             status: Int
         ) {
-            if (status == BluetoothGatt.GATT_SUCCESS && characteristic.uuid == AUTH_RESPONSE_CHAR_UUID) {
-                _connectionState.value = "PC Unlocked Successfully!"
-                onUnlockSuccess?.invoke()
+            when {
+                status == BluetoothGatt.GATT_SUCCESS && characteristic.uuid == AUTH_RESPONSE_CHAR_UUID -> {
+                    _connectionState.value = "PC Unlocked Successfully!"
+                    onUnlockSuccess?.invoke()
+                }
+                characteristic.uuid == PAIRING_CHAR_UUID -> {
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        _connectionState.value = "Paired Successfully!"
+                        onPairingSuccess?.invoke()
+                    } else {
+                        _connectionState.value = "Pairing Failed (status=$status)"
+                        onPairingFailed?.invoke("BLE write failed with status $status")
+                    }
+                }
             }
         }
 
@@ -200,6 +213,7 @@ class BleClientManager private constructor(private val context: Context) {
         dos.flush()
 
         char.value = baos.toByteArray()
+        char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         bluetoothGatt?.writeCharacteristic(char)
     }
 
