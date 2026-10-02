@@ -53,9 +53,13 @@ class BleClientManager private constructor(private val context: Context) {
     var onPairingSuccess: (() -> Unit)? = null
     var onPairingFailed: ((String) -> Unit)? = null
 
+    private var isScanning = false
+
     fun startScan() {
+        if (isScanning || bluetoothGatt != null) return
         val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
         _connectionState.value = "Scanning for PC..."
+        isScanning = true
 
         val filter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(SERVICE_UUID))
@@ -73,12 +77,14 @@ class BleClientManager private constructor(private val context: Context) {
             _rssiValue.value = result.rssi
             Log.d(TAG, "Discovered PC BLE device: ${result.device.address}, RSSI: ${result.rssi}")
             
+            isScanning = false
             bluetoothAdapter?.bluetoothLeScanner?.stopScan(this)
             connectToDevice(result.device)
         }
 
         override fun onScanFailed(errorCode: Int) {
-            _connectionState.value = "Scan Failed ($errorCode)"
+            isScanning = false
+            _connectionState.value = "Scan Failed ($errorCode) - Try restarting Bluetooth"
         }
     }
 
