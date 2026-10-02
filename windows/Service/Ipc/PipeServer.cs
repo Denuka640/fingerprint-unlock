@@ -102,7 +102,18 @@ public class PipeServer : IDisposable
                 int bytesRead = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct);
                 if (bytesRead == 0) break;
 
-                var msg = MemoryMarshal.Read<PipeMessage>(buffer);
+                IntPtr ptrIn = Marshal.AllocHGlobal(buffer.Length);
+                PipeMessage msg;
+                try
+                {
+                    Marshal.Copy(buffer, 0, ptrIn, buffer.Length);
+                    msg = Marshal.PtrToStructure<PipeMessage>(ptrIn);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(ptrIn);
+                }
+
                 if (msg.Command == PipeCommand.QueryStatus)
                 {
                     var resp = new PipeMessage
@@ -113,7 +124,16 @@ public class PipeServer : IDisposable
                     };
 
                     byte[] respBytes = new byte[Marshal.SizeOf<PipeMessage>()];
-                    MemoryMarshal.Write(respBytes, in resp);
+                    IntPtr ptrOut = Marshal.AllocHGlobal(respBytes.Length);
+                    try
+                    {
+                        Marshal.StructureToPtr(resp, ptrOut, false);
+                        Marshal.Copy(ptrOut, respBytes, 0, respBytes.Length);
+                    }
+                    finally
+                    {
+                        Marshal.FreeHGlobal(ptrOut);
+                    }
                     await stream.WriteAsync(respBytes, ct);
                     await stream.FlushAsync(ct);
                 }
@@ -144,7 +164,16 @@ public class PipeServer : IDisposable
         };
 
         byte[] msgBytes = new byte[Marshal.SizeOf<PipeMessage>()];
-        MemoryMarshal.Write(msgBytes, in msg);
+        IntPtr ptrOut = Marshal.AllocHGlobal(msgBytes.Length);
+        try
+        {
+            Marshal.StructureToPtr(msg, ptrOut, false);
+            Marshal.Copy(ptrOut, msgBytes, 0, msgBytes.Length);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptrOut);
+        }
 
         List<NamedPipeServerStream> clients;
         lock (_clientsLock)
@@ -182,7 +211,16 @@ public class PipeServer : IDisposable
         };
 
         byte[] msgBytes = new byte[Marshal.SizeOf<PipeMessage>()];
-        MemoryMarshal.Write(msgBytes, in msg);
+        IntPtr ptrOut = Marshal.AllocHGlobal(msgBytes.Length);
+        try
+        {
+            Marshal.StructureToPtr(msg, ptrOut, false);
+            Marshal.Copy(ptrOut, msgBytes, 0, msgBytes.Length);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptrOut);
+        }
 
         List<NamedPipeServerStream> clients;
         lock (_clientsLock)
