@@ -64,6 +64,8 @@ public partial class MainWindow : Window
             };
 
             string json = JsonSerializer.Serialize(pairingPayload);
+            
+            TxtMachineInfo.Text = $"Machine: {Environment.MachineName}\nIP: {ipAddress}:9898";
 
             using var qrGenerator = new QRCodeGenerator();
             using var qrCodeData = qrGenerator.CreateQrCode(json, QRCodeGenerator.ECCLevel.Q);

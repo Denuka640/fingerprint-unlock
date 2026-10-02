@@ -93,6 +93,7 @@
                     </StackPanel>
 
                     <!-- QR Code Display -->
+                    <TextBlock x:Name="TxtMachineInfo" Text="IP: Detecting..." FontSize="11" Foreground="{StaticResource AccentPrimary}" HorizontalAlignment="Center" Margin="0,0,0,4"/>
                     <Border Grid.Row="1" Background="White" Width="180" Height="180" CornerRadius="10" HorizontalAlignment="Center" Margin="0,0,0,16" Padding="8">
                         <Image x:Name="ImgQrCode" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                     </Border>
