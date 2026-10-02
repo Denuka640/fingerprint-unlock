@@ -13,6 +13,8 @@ import com.journeyapps.barcodescanner.ScanOptions
 import com.unlock.fingerprint.R
 import com.unlock.fingerprint.network.TcpClientManager
 import com.unlock.fingerprint.ble.BleClientManager
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.unlock.fingerprint.crypto.KeyStoreManager
 import org.json.JSONObject
 
