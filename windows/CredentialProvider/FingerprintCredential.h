@@ -66,6 +66,7 @@ public:
 
 private:
     static DWORD WINAPI BackgroundListenerThread(LPVOID lpParam);
+    static void CALLBACK OnPipeStatusUpdate(void* pContext, PCWSTR statusText);
 
     LONG _cRef;
     CREDENTIAL_PROVIDER_USAGE_SCENARIO _cpus;

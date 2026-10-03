@@ -2,6 +2,9 @@
 #include "common.h"
 #include <ntsecapi.h>
 
+// Callback for real-time status updates while pipe stays connected
+typedef void (*PipeStatusCallback)(void* pContext, PCWSTR statusText);
+
 HRESULT KerbInteractiveUnlockLogonPack(
     _In_ PCWSTR domain,
     _In_ PCWSTR username,
@@ -24,5 +27,8 @@ HRESULT WaitForPipeUnlock(
     _Out_writes_(cchPassword) PWSTR pszPassword,
     _In_ DWORD cchPassword,
     _Out_writes_(cchStatus) PWSTR pszStatus,
-    _In_ DWORD cchStatus
+    _In_ DWORD cchStatus,
+    _In_opt_ PipeStatusCallback pfnStatusCallback = nullptr,
+    _In_opt_ void* pCallbackContext = nullptr
 );
+

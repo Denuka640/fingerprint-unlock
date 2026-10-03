@@ -162,23 +162,8 @@ IFACEMETHODIMP FingerprintCredential::SetSelected(_Out_ BOOL* pbAutoLogon)
 
 IFACEMETHODIMP FingerprintCredential::SetDeselected()
 {
-    EnterCriticalSection(&_cs);
-    if (_hCancelEvent)
-    {
-        SetEvent(_hCancelEvent);
-    }
-    if (_hListenerThread)
-    {
-        WaitForSingleObject(_hListenerThread, 500);
-        CloseHandle(_hListenerThread);
-        _hListenerThread = nullptr;
-    }
-    if (_hCancelEvent)
-    {
-        CloseHandle(_hCancelEvent);
-        _hCancelEvent = nullptr;
-    }
-    LeaveCriticalSection(&_cs);
+    // Do NOT stop the background listener here. It must keep running
+    // to catch unlock broadcasts even when the tile is not selected.
     return S_OK;
 }
 
@@ -434,6 +419,17 @@ void FingerprintCredential::TriggerUnlock(PCWSTR username, PCWSTR domain, PCWSTR
     LeaveCriticalSection(&_cs);
 }
 
+// Static callback invoked by WaitForPipeUnlock on every StatusUpdate message
+// while the pipe connection stays alive.
+void CALLBACK FingerprintCredential::OnPipeStatusUpdate(void* pContext, PCWSTR statusText)
+{
+    FingerprintCredential* pThis = static_cast<FingerprintCredential*>(pContext);
+    if (pThis)
+    {
+        pThis->UpdateStatusText(statusText);
+    }
+}
+
 DWORD WINAPI FingerprintCredential::BackgroundListenerThread(LPVOID lpParam)
 {
     FingerprintCredential* pThis = static_cast<FingerprintCredential*>(lpParam);
@@ -445,12 +441,18 @@ DWORD WINAPI FingerprintCredential::BackgroundListenerThread(LPVOID lpParam)
         WCHAR password[128] = {};
         WCHAR status[256] = {};
 
+        // This call keeps a persistent pipe connection open and reads
+        // messages in a loop. StatusUpdate messages are pushed to
+        // the lock screen UI via the callback. It only returns when
+        // an UnlockTriggered arrives (S_OK), cancel (E_ABORT), or error.
         HRESULT hr = WaitForPipeUnlock(
             pThis->_hCancelEvent,
             username, ARRAYSIZE(username),
             domain, ARRAYSIZE(domain),
             password, ARRAYSIZE(password),
-            status, ARRAYSIZE(status)
+            status, ARRAYSIZE(status),
+            OnPipeStatusUpdate,
+            pThis
         );
 
         if (hr == S_OK) // Unlock triggered
@@ -458,20 +460,17 @@ DWORD WINAPI FingerprintCredential::BackgroundListenerThread(LPVOID lpParam)
             pThis->TriggerUnlock(username, domain, password);
             break;
         }
-        else if (hr == S_FALSE) // Status update
-        {
-            pThis->UpdateStatusText(status);
-        }
         else if (hr == E_ABORT) // Cancelled
         {
             break;
         }
         else
         {
-            // Retry delay
+            // Pipe connection lost — retry after a short delay
             Sleep(1000);
         }
     }
 
     return 0;
 }
+

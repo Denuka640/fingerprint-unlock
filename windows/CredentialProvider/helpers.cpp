@@ -129,9 +129,13 @@ HRESULT WaitForPipeUnlock(
     _Out_writes_(cchPassword) PWSTR pszPassword,
     _In_ DWORD cchPassword,
     _Out_writes_(cchStatus) PWSTR pszStatus,
-    _In_ DWORD cchStatus
+    _In_ DWORD cchStatus,
+    _In_opt_ PipeStatusCallback pfnStatusCallback,
+    _In_opt_ void* pCallbackContext
 )
 {
+    // Connect to the named pipe. Keep this connection PERSISTENT so we never
+    // miss the UnlockTriggered broadcast from the service.
     HANDLE hPipe = CreateFileW(
         BIOMETRIC_PIPE_NAME,
         GENERIC_READ | GENERIC_WRITE,
@@ -149,52 +153,86 @@ HRESULT WaitForPipeUnlock(
 
     OVERLAPPED ov = {};
     ov.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-
-    PipeMessage msg = {};
-    DWORD bytesRead = 0;
-    BOOL bSuccess = ReadFile(hPipe, &msg, sizeof(msg), &bytesRead, &ov);
-
-    if (!bSuccess && GetLastError() == ERROR_IO_PENDING)
+    if (!ov.hEvent)
     {
-        HANDLE waitHandles[2] = { ov.hEvent, hCancelEvent };
-        DWORD waitResult = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
-
-        if (waitResult == WAIT_OBJECT_0) // Pipe message received
-        {
-            GetOverlappedResult(hPipe, &ov, &bytesRead, FALSE);
-            bSuccess = TRUE;
-        }
-        else // Cancelled or error
-        {
-            CancelIo(hPipe);
-            CloseHandle(ov.hEvent);
-            CloseHandle(hPipe);
-            return E_ABORT;
-        }
+        CloseHandle(hPipe);
+        return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    if (bSuccess && bytesRead >= sizeof(PipeCommand))
+    // Stay connected and keep reading messages in a loop until we get
+    // an UnlockTriggered command or are cancelled.
+    HRESULT hrResult = E_FAIL;
+
+    while (true)
     {
-        if (msg.Command == PipeCommand::UnlockTriggered)
+        ResetEvent(ov.hEvent);
+
+        PipeMessage msg = {};
+        DWORD bytesRead = 0;
+        BOOL bSuccess = ReadFile(hPipe, &msg, sizeof(msg), &bytesRead, &ov);
+
+        if (!bSuccess)
         {
-            StringCchCopyW(pszUsername, cchUsername, msg.Username);
-            StringCchCopyW(pszDomain, cchDomain, msg.Domain);
-            StringCchCopyW(pszPassword, cchPassword, msg.Password);
-            StringCchCopyW(pszStatus, cchStatus, L"Unlocking...");
-            CloseHandle(ov.hEvent);
-            CloseHandle(hPipe);
-            return S_OK;
+            DWORD dwErr = GetLastError();
+            if (dwErr == ERROR_IO_PENDING)
+            {
+                HANDLE waitHandles[2] = { ov.hEvent, hCancelEvent };
+                DWORD waitResult = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
+
+                if (waitResult == WAIT_OBJECT_0) // Pipe data arrived
+                {
+                    if (!GetOverlappedResult(hPipe, &ov, &bytesRead, FALSE))
+                    {
+                        hrResult = E_FAIL;
+                        break;
+                    }
+                    bSuccess = TRUE;
+                }
+                else // Cancel event fired or error
+                {
+                    CancelIo(hPipe);
+                    hrResult = E_ABORT;
+                    break;
+                }
+            }
+            else
+            {
+                hrResult = E_FAIL;
+                break;
+            }
         }
-        else if (msg.Command == PipeCommand::StatusUpdate)
+
+        if (bSuccess && bytesRead >= sizeof(PipeCommand))
         {
-            StringCchCopyW(pszStatus, cchStatus, msg.StatusMessage);
-            CloseHandle(ov.hEvent);
-            CloseHandle(hPipe);
-            return S_FALSE;
+            if (msg.Command == PipeCommand::UnlockTriggered)
+            {
+                StringCchCopyW(pszUsername, cchUsername, msg.Username);
+                StringCchCopyW(pszDomain, cchDomain, msg.Domain);
+                StringCchCopyW(pszPassword, cchPassword, msg.Password);
+                StringCchCopyW(pszStatus, cchStatus, L"Unlocking...");
+                hrResult = S_OK;
+                break;
+            }
+            else if (msg.Command == PipeCommand::StatusUpdate)
+            {
+                StringCchCopyW(pszStatus, cchStatus, msg.StatusMessage);
+                // Push real-time update to lock screen UI via callback
+                if (pfnStatusCallback)
+                {
+                    pfnStatusCallback(pCallbackContext, msg.StatusMessage);
+                }
+                continue;
+            }
+        }
+        else if (bytesRead == 0)
+        {
+            hrResult = E_FAIL;
+            break;
         }
     }
 
     CloseHandle(ov.hEvent);
     CloseHandle(hPipe);
-    return E_FAIL;
+    return hrResult;
 }
+
