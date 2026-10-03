@@ -27,6 +27,7 @@ public class BiometricBackgroundWorker : BackgroundService
 
         _bleServer.OnLog += msg => _logger.LogInformation("[BLE] {Message}", msg);
         _networkServer.OnLog += msg => _logger.LogInformation("[WiFi] {Message}", msg);
+        _pipeServer.OnLog += msg => _logger.LogInformation("{Message}", msg);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

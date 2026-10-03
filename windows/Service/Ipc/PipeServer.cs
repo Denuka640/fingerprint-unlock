@@ -40,6 +40,7 @@ public class PipeServer : IDisposable
     private readonly object _clientsLock = new();
 
     public string CurrentStatus { get; set; } = "Waiting for phone connection...";
+    public event Action<string>? OnLog;
 
     public void Start()
     {
@@ -77,6 +78,7 @@ public class PipeServer : IDisposable
                 {
                     _activeClients.Add(serverStream);
                 }
+                OnLog?.Invoke($"[Pipe] New client connected. Total active clients: {_activeClients.Count}");
 
                 _ = Task.Run(() => HandleClientAsync(serverStream, ct), ct);
             }
@@ -197,6 +199,8 @@ public class PipeServer : IDisposable
 
     public async Task SendUnlockTriggerAsync(string username, string domain, string password)
     {
+        OnLog?.Invoke($"[Pipe] SendUnlockTrigger called. User='{username}', Domain='{domain}', PwdLen={password.Length}");
+
         var msg = new PipeMessage
         {
             Command = PipeCommand.UnlockTriggered,
@@ -228,6 +232,9 @@ public class PipeServer : IDisposable
             clients = _activeClients.ToList();
         }
 
+        OnLog?.Invoke($"[Pipe] Broadcasting UnlockTriggered to {clients.Count} connected client(s).");
+
+        int sent = 0;
         foreach (var client in clients)
         {
             try
@@ -236,9 +243,23 @@ public class PipeServer : IDisposable
                 {
                     await client.WriteAsync(msgBytes);
                     await client.FlushAsync();
+                    sent++;
+                    OnLog?.Invoke($"[Pipe] Successfully wrote UnlockTriggered to client #{sent}.");
+                }
+                else
+                {
+                    OnLog?.Invoke("[Pipe] WARNING: Client was disconnected, skipping.");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                OnLog?.Invoke($"[Pipe] ERROR writing to client: {ex.Message}");
+            }
+        }
+
+        if (sent == 0)
+        {
+            OnLog?.Invoke("[Pipe] CRITICAL: No pipe clients received the unlock trigger! CredentialProvider DLL may not be connected.");
         }
     }
 

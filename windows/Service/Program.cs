@@ -25,7 +25,12 @@ public class Program
 
         builder.Logging.ClearProviders();
         builder.Logging.AddConsole();
-        builder.Logging.SetMinimumLevel(LogLevel.Information);
+        // File-based logging for diagnostics
+        var logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "BiometricUnlock");
+        Directory.CreateDirectory(logDir);
+        var logPath = Path.Combine(logDir, "service.log");
+        builder.Logging.AddProvider(new FileLoggerProvider(logPath));
+        builder.Logging.SetMinimumLevel(LogLevel.Debug);
 
         // Core singletons
         builder.Services.AddSingleton<CryptoEngine>();
