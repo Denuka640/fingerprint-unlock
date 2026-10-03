@@ -50,17 +50,35 @@ public partial class MainWindow : Window
             string ipAddress = "127.0.0.1";
             try
             {
-                using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
+                // Find the best IP: prefer WiFi/DHCP addresses, skip 169.254.x.x link-local
+                foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
                 {
-                    socket.Connect("8.8.8.8", 65530);
-                    if (socket.LocalEndPoint is IPEndPoint endPoint)
+                    if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                    if (ni.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback) continue;
+                    
+                    var props = ni.GetIPProperties();
+                    foreach (var addr in props.UnicastAddresses)
                     {
-                        ipAddress = endPoint.Address.ToString();
+                        if (addr.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                        string ip = addr.Address.ToString();
+                        // Skip link-local (169.254.x.x) and loopback
+                        if (ip.StartsWith("169.254.") || ip.StartsWith("127.")) continue;
+                        
+                        ipAddress = ip;
+                        // Prefer WiFi interfaces - if we find one, use it immediately
+                        if (ni.Name.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase) ||
+                            ni.Description.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase) ||
+                            ni.Description.Contains("Wireless", StringComparison.OrdinalIgnoreCase))
+                        {
+                            goto foundIp;
+                        }
                     }
                 }
+                foundIp:;
             }
             catch
             {
+                // Last resort fallback
                 var host = Dns.GetHostEntry(Dns.GetHostName());
                 ipAddress = host.AddressList.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork)?.ToString() ?? "127.0.0.1";
             }
