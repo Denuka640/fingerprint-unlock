@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Biometric Unlock</string>
+    <string name="accessibility_service_description">Automatically detects copied text in any app and syncs it to your laptop clipboard instantly.</string>
 </resources>

@@ -1,28 +1,158 @@
 using System.IO;
+using System.IO.Pipes;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using QRCoder;
-using System.Net;
-using System.Net.Sockets;
-using System.Linq;
 using BiometricUnlock.Service.Bluetooth;
 using BiometricUnlock.Service.Ipc;
 using BiometricUnlock.Service.Security;
+
+using MessageBox = System.Windows.MessageBox;
+using Application = System.Windows.Application;
 
 namespace BiometricUnlock.SetupApp;
 
 public partial class MainWindow : Window
 {
     private readonly DpapiVault _vault;
+    private CancellationTokenSource? _pipeListenerCts;
+    private System.Windows.Forms.NotifyIcon? _notifyIcon;
 
     public MainWindow()
     {
         InitializeComponent();
         _vault = new DpapiVault();
 
+        InitializeNotifyIcon();
         LoadSettings();
         GeneratePairingQrCode();
+        StartPipeListener();
+
+        // Check if started minimized in background on Windows startup
+        var args = Environment.GetCommandLineArgs();
+        if (args.Any(a => a.Equals("--minimized", StringComparison.OrdinalIgnoreCase) || a.Equals("--autostart", StringComparison.OrdinalIgnoreCase)))
+        {
+            WindowState = WindowState.Minimized;
+            ShowInTaskbar = false;
+            Hide();
+        }
+    }
+
+    private void InitializeNotifyIcon()
+    {
+        try
+        {
+            _notifyIcon = new System.Windows.Forms.NotifyIcon
+            {
+                Icon = System.Drawing.SystemIcons.Shield,
+                Visible = true,
+                Text = "Biometric Phone Unlock & Clipboard Sync"
+            };
+
+            var contextMenu = new System.Windows.Forms.ContextMenuStrip();
+            contextMenu.Items.Add("Open Biometric Setup", null, (s, e) => RestoreFromTray());
+            contextMenu.Items.Add("Exit", null, (s, e) => ExitApp());
+
+            _notifyIcon.ContextMenuStrip = contextMenu;
+            _notifyIcon.DoubleClick += (s, e) => RestoreFromTray();
+
+            StateChanged += (s, e) =>
+            {
+                if (WindowState == WindowState.Minimized)
+                {
+                    ShowInTaskbar = false;
+                    Hide();
+                    _notifyIcon?.ShowBalloonTip(1500, "Biometric Sync Active", "Running in system tray for instant clipboard sync.", System.Windows.Forms.ToolTipIcon.Info);
+                }
+            };
+        }
+        catch { }
+    }
+
+    private void RestoreFromTray()
+    {
+        Show();
+        ShowInTaskbar = true;
+        WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    private void ExitApp()
+    {
+        _notifyIcon?.Dispose();
+        _notifyIcon = null;
+        _pipeListenerCts?.Cancel();
+        System.Windows.Application.Current.Shutdown();
+    }
+
+    private void StartPipeListener()
+    {
+        _pipeListenerCts = new CancellationTokenSource();
+        Task.Run(() => ListenToPipeAsync(_pipeListenerCts.Token));
+    }
+
+    private async Task ListenToPipeAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                using var clientStream = new NamedPipeClientStream(".", "BiometricUnlockPipe", PipeDirection.InOut, PipeOptions.Asynchronous);
+                await clientStream.ConnectAsync(3000, ct);
+
+                byte[] buffer = new byte[Marshal.SizeOf<PipeMessage>()];
+                while (clientStream.IsConnected && !ct.IsCancellationRequested)
+                {
+                    int bytesRead = await clientStream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct);
+                    if (bytesRead == 0) break;
+
+                    IntPtr ptrIn = Marshal.AllocHGlobal(buffer.Length);
+                    PipeMessage msg;
+                    try
+                    {
+                        Marshal.Copy(buffer, 0, ptrIn, buffer.Length);
+                        msg = Marshal.PtrToStructure<PipeMessage>(ptrIn);
+                    }
+                    finally
+                    {
+                        Marshal.FreeHGlobal(ptrIn);
+                    }
+
+                    if (msg.Command == PipeCommand.ClipboardSync)
+                    {
+                        string text = msg.StatusMessage;
+                        Dispatcher.Invoke(() =>
+                        {
+                            try
+                            {
+                                System.Windows.Clipboard.SetText(text);
+                                TxtServiceStatus.Text = $"📋 Copied to Windows Clipboard from Phone! ({text.Length} chars)";
+                                string preview = text.Length > 30 ? text.Substring(0, 30) + "..." : text;
+                                _notifyIcon?.ShowBalloonTip(2500, "Clipboard Synced 📋", $"Copied from Phone: {preview}", System.Windows.Forms.ToolTipIcon.Info);
+                            }
+                            catch (Exception ex)
+                            {
+                                TxtServiceStatus.Text = $"Clipboard Sync Warning: {ex.Message}";
+                            }
+                        });
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch
+            {
+                await Task.Delay(2000, ct);
+            }
+        }
     }
 
     private void LoadSettings()

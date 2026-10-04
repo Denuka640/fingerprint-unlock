@@ -229,5 +229,35 @@ class TcpClientManager private constructor(private val context: Context) {
         }
         return@withContext false
     }
+
+    suspend fun sendClipboardData(deviceId: String, text: String): Boolean = withContext(Dispatchers.IO) {
+        val ip = currentIpAddress ?: discoverPcIpOnLan() ?: return@withContext false
+        try {
+            val url = URL("http://$ip:$currentPort/clipboard")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/octet-stream")
+            connection.connectTimeout = 3000
+            connection.readTimeout = 3000
+
+            val output = DataOutputStream(connection.outputStream)
+            val devIdBytes = deviceId.toByteArray(Charsets.UTF_8)
+            val textBytes = text.toByteArray(Charsets.UTF_8)
+
+            output.writeByte(devIdBytes.size)
+            output.write(devIdBytes)
+            output.writeInt(textBytes.size)
+            output.write(textBytes)
+
+            output.flush()
+            output.close()
+
+            return@withContext connection.responseCode == 200
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send clipboard data over WiFi: ${e.message}")
+        }
+        return@withContext false
+    }
 }
 

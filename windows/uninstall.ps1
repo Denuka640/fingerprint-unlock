@@ -37,7 +37,7 @@ if ($existing) {
 }
 
 # 3. Remove Desktop & Start Menu Shortcuts
-Write-Host "Removing App Shortcuts..." -ForegroundColor Yellow
+Write-Host "Removing App Shortcuts & Auto-Start Entry..." -ForegroundColor Yellow
 $desktopPath = [System.Environment]::GetFolderPath('Desktop')
 $startMenuPath = [System.Environment]::GetFolderPath('Programs')
 
@@ -47,7 +47,17 @@ if (Test-Path $desktopShortcut) { Remove-Item $desktopShortcut -Force }
 $startMenuShortcut = "$startMenuPath\Biometric Setup.lnk"
 if (Test-Path $startMenuShortcut) { Remove-Item $startMenuShortcut -Force }
 
-Write-Host "Shortcuts removed!" -ForegroundColor Green
+# Remove User Startup Registry Entry
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "BiometricUnlockSetup" -ErrorAction SilentlyContinue
+
+# Stop any running SetupApp process
+Stop-Process -Name "BiometricUnlockSetup" -Force -ErrorAction SilentlyContinue
+
+# Remove Firewall Rules
+netsh advfirewall firewall delete rule name="BiometricUnlock WiFi Port 9898" 2>$null | Out-Null
+netsh advfirewall firewall delete rule name="BiometricUnlock UDP Port 9899" 2>$null | Out-Null
+
+Write-Host "Shortcuts, Auto-Start Entry, and Firewall Rules removed!" -ForegroundColor Green
 
 # 4. Clean DPAPI Vault (Optional - let's ask the user if they want to wipe data)
 $response = Read-Host "Do you want to delete all saved credentials and paired devices? (Y/N)"

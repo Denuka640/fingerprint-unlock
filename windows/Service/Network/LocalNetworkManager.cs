@@ -221,6 +221,52 @@ public class LocalNetworkManager : IAsyncDisposable
 
                 res.StatusCode = 200;
             }
+            else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/clipboard")
+            {
+                using var ms = new MemoryStream();
+                await req.InputStream.CopyToAsync(ms);
+                var data = ms.ToArray();
+
+                if (data.Length < 5)
+                {
+                    res.StatusCode = 400;
+                    return;
+                }
+
+                using var readerMs = new MemoryStream(data);
+                using var br = new BinaryReader(readerMs);
+                
+                byte devIdLen = br.ReadByte();
+                string deviceId = System.Text.Encoding.UTF8.GetString(br.ReadBytes(devIdLen));
+
+                // Read 4-byte Int32 big endian length
+                byte b0 = br.ReadByte();
+                byte b1 = br.ReadByte();
+                byte b2 = br.ReadByte();
+                byte b3 = br.ReadByte();
+                int textLen = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+
+                if (textLen < 0 || textLen > 100000)
+                {
+                    res.StatusCode = 400;
+                    return;
+                }
+
+                string clipboardText = System.Text.Encoding.UTF8.GetString(br.ReadBytes(textLen));
+
+                var pairedDev = _vault.FindPairedDevice(deviceId);
+                if (pairedDev == null)
+                {
+                    OnLog?.Invoke($"Clipboard Sync Rejected: Device {deviceId} not paired.");
+                    res.StatusCode = 403;
+                    return;
+                }
+
+                OnLog?.Invoke($"[WiFi Clipboard] Received {clipboardText.Length} chars from '{pairedDev.DeviceName}'. Syncing to Windows Clipboard...");
+                await _pipeServer.BroadcastClipboardAsync(clipboardText);
+
+                res.StatusCode = 200;
+            }
             else
             {
                 res.StatusCode = 404;

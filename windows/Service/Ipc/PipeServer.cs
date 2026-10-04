@@ -10,7 +10,8 @@ public enum PipeCommand : uint
     QueryStatus = 1,
     StatusUpdate = 2,
     UnlockTriggered = 3,
-    Acknowledge = 4
+    Acknowledge = 4,
+    ClipboardSync = 5
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1, CharSet = CharSet.Unicode)]
@@ -54,12 +55,13 @@ public class PipeServer : IDisposable
             try
             {
                 var pipeSecurity = new PipeSecurity();
-                // Security Audit Fix: Only allow LocalSystem and Administrators to connect to the pipe.
-                // LogonUI.exe runs as SYSTEM. This prevents local malware from stealing the plaintext password.
+                // Allow LocalSystem, Administrators, and Authenticated Users (for user-session clipboard app) to connect.
                 var sidSystem = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
                 var sidAdmins = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+                var sidUsers = new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null);
                 pipeSecurity.AddAccessRule(new PipeAccessRule(sidSystem, PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
                 pipeSecurity.AddAccessRule(new PipeAccessRule(sidAdmins, PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
+                pipeSecurity.AddAccessRule(new PipeAccessRule(sidUsers, PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
 
                 var serverStream = NamedPipeServerStreamAcl.Create(
                     PipeName,
@@ -118,11 +120,12 @@ public class PipeServer : IDisposable
 
                 if (msg.Command == PipeCommand.QueryStatus)
                 {
+                    string safeStatus = CurrentStatus.Length > 255 ? CurrentStatus.Substring(0, 255) : CurrentStatus;
                     var resp = new PipeMessage
                     {
                         Command = PipeCommand.StatusUpdate,
-                        StatusLength = (uint)CurrentStatus.Length,
-                        StatusMessage = CurrentStatus
+                        StatusLength = (uint)safeStatus.Length,
+                        StatusMessage = safeStatus
                     };
 
                     byte[] respBytes = new byte[Marshal.SizeOf<PipeMessage>()];
@@ -158,11 +161,56 @@ public class PipeServer : IDisposable
     public async Task BroadcastStatusAsync(string status)
     {
         CurrentStatus = status;
+        string safeStatus = status.Length > 255 ? status.Substring(0, 255) : status;
         var msg = new PipeMessage
         {
             Command = PipeCommand.StatusUpdate,
-            StatusLength = (uint)status.Length,
-            StatusMessage = status
+            StatusLength = (uint)safeStatus.Length,
+            StatusMessage = safeStatus
+        };
+
+        byte[] msgBytes = new byte[Marshal.SizeOf<PipeMessage>()];
+        IntPtr ptrOut = Marshal.AllocHGlobal(msgBytes.Length);
+        try
+        {
+            Marshal.StructureToPtr(msg, ptrOut, false);
+            Marshal.Copy(ptrOut, msgBytes, 0, msgBytes.Length);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptrOut);
+        }
+
+        List<NamedPipeServerStream> clients;
+        lock (_clientsLock)
+        {
+            clients = _activeClients.ToList();
+        }
+
+        foreach (var client in clients)
+        {
+            try
+            {
+                if (client.IsConnected)
+                {
+                    await client.WriteAsync(msgBytes);
+                    await client.FlushAsync();
+                }
+            }
+            catch { }
+        }
+    }
+
+    public async Task BroadcastClipboardAsync(string text)
+    {
+        OnLog?.Invoke($"[Pipe] Broadcasting ClipboardSync to connected clients (length={text.Length}).");
+        
+        string safeText = text.Length > 255 ? text.Substring(0, 255) : text;
+        var msg = new PipeMessage
+        {
+            Command = PipeCommand.ClipboardSync,
+            StatusLength = (uint)safeText.Length,
+            StatusMessage = safeText
         };
 
         byte[] msgBytes = new byte[Marshal.SizeOf<PipeMessage>()];

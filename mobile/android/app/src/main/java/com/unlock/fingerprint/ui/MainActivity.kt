@@ -23,6 +23,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bleManager: BleClientManager
     private lateinit var tcpManager: com.unlock.fingerprint.network.TcpClientManager
     private lateinit var biometricHelper: BiometricPromptHelper
+    private lateinit var clipboardSyncManager: com.unlock.fingerprint.network.ClipboardSyncManager
 
     private lateinit var txtStatus: TextView
     private lateinit var txtRssi: TextView
@@ -30,6 +31,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnScan: Button
     private lateinit var btnUnlock: Button
     private lateinit var btnPair: Button
+    private lateinit var switchAutoSync: com.google.android.material.switchmaterial.SwitchMaterial
+    private lateinit var btnSyncClipboard: Button
+    private lateinit var txtClipboardStatus: TextView
 
     private var currentChallenge: ByteArray? = null
 
@@ -54,12 +58,32 @@ class MainActivity : AppCompatActivity() {
         btnScan = findViewById(R.id.btnScan)
         btnUnlock = findViewById(R.id.btnUnlock)
         btnPair = findViewById(R.id.btnPair)
+        switchAutoSync = findViewById(R.id.switchAutoSync)
+        btnSyncClipboard = findViewById(R.id.btnSyncClipboard)
+        txtClipboardStatus = findViewById(R.id.txtClipboardStatus)
 
         // Initialize hardware key
         KeyStoreManager.getOrCreateHardwareKeyPair()
 
         bleManager = BleClientManager.getInstance(this)
         tcpManager = com.unlock.fingerprint.network.TcpClientManager.getInstance(this)
+        clipboardSyncManager = com.unlock.fingerprint.network.ClipboardSyncManager(this)
+
+        switchAutoSync.isChecked = clipboardSyncManager.isAutoSyncEnabled
+        switchAutoSync.setOnCheckedChangeListener { _, isChecked ->
+            clipboardSyncManager.isAutoSyncEnabled = isChecked
+            txtClipboardStatus.text = if (isChecked) "Auto syncs copied text to PC" else "Auto sync paused"
+        }
+
+        btnSyncClipboard.setOnClickListener {
+            txtClipboardStatus.text = "Syncing clipboard..."
+            clipboardSyncManager.syncCurrentClipboard { success, msg ->
+                runOnUiThread {
+                    txtClipboardStatus.text = msg
+                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
 
         biometricHelper = BiometricPromptHelper(
             this,
@@ -136,6 +160,36 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshPairedDeviceDisplay()
+        try {
+            clipboardSyncManager.startListening()
+            clipboardSyncManager.checkAndAutoSyncIfNewText { success, msg ->
+                if (success) {
+                    runOnUiThread {
+                        txtClipboardStatus.text = msg
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            try {
+                clipboardSyncManager.checkAndAutoSyncIfNewText { success, msg ->
+                    if (success) {
+                        runOnUiThread {
+                            txtClipboardStatus.text = msg
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        clipboardSyncManager.stopListening()
     }
 
     private fun refreshPairedDeviceDisplay() {
@@ -203,6 +257,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        clipboardSyncManager.stopListening()
         bleManager.disconnect()
     }
 }

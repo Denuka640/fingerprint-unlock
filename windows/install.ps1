@@ -12,7 +12,7 @@ if (-not $isAdmin) {
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Write-Host "Starting Unified Installation..." -ForegroundColor Cyan
 
-# 0. Stop existing service to free up file locks before building
+# 0. Stop existing service and setup app to free up file locks before building
 $serviceName = "BiometricUnlockService"
 $existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if ($existing) {
@@ -20,6 +20,10 @@ if ($existing) {
     Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
 }
+
+Write-Host "Stopping any running Setup App instances..." -ForegroundColor Yellow
+Stop-Process -Name "BiometricUnlockSetup" -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
 
 # 1. Build the .NET Projects (Service & SetupApp)
 Write-Host "Building Windows Service & Setup App (Release)..." -ForegroundColor Yellow
@@ -60,11 +64,17 @@ if ($existing) {
 
 New-Service -Name $serviceName -BinaryPathName "`"$exePath`" --service" -DisplayName "Biometric Phone Unlock Service" -Description "Manages BLE GATT advertising and biometric credential verification for phone-based Windows unlock." -StartupType Automatic -ErrorAction Stop | Out-Null
 
-Write-Host "Configuring Windows Firewall to allow WiFi TCP Port 9898..." -ForegroundColor Yellow
+# Set Service Auto-Restart on Failure
+& sc.exe failure $serviceName reset= 86400 actions= restart/10000/restart/10000/restart/10000 | Out-Null
+
+Write-Host "Configuring Windows Firewall to allow WiFi TCP Port 9898 & UDP Discovery Port 9899..." -ForegroundColor Yellow
+netsh advfirewall firewall delete rule name="BiometricUnlock WiFi Port 9898" 2>$null | Out-Null
+netsh advfirewall firewall delete rule name="BiometricUnlock UDP Port 9899" 2>$null | Out-Null
 netsh advfirewall firewall add rule name="BiometricUnlock WiFi Port 9898" dir=in action=allow protocol=TCP localport=9898 | Out-Null
+netsh advfirewall firewall add rule name="BiometricUnlock UDP Port 9899" dir=in action=allow protocol=UDP localport=9899 | Out-Null
 
 Start-Service -Name $serviceName -ErrorAction Stop
-Write-Host "Service installed and started successfully!" -ForegroundColor Green
+Write-Host "Service installed and set to start automatically on boot!" -ForegroundColor Green
 
 # 4. Register Credential Provider DLL
 Write-Host "Registering Credential Provider..." -ForegroundColor Yellow
@@ -96,9 +106,19 @@ $shortcutSm.Save()
 
 Write-Host "Shortcuts created on Desktop and Start Menu!" -ForegroundColor Green
 
+# 6. Configure Windows Startup Registry Entry for Clipboard Sync Helper
+Write-Host "Configuring User Session Auto-Start for Instant Clipboard Sync..." -ForegroundColor Yellow
+$runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+Set-ItemProperty -Path $runKey -Name "BiometricUnlockSetup" -Value "`"$setupAppPath`" --minimized" -ErrorAction Stop
+Write-Host "User Session Auto-Start configured in Registry!" -ForegroundColor Green
+
+# Start the Setup App now so Clipboard Sync is immediately active
+Start-Process -FilePath $setupAppPath
+
 Write-Host "`n===============================================" -ForegroundColor Cyan
-Write-Host "🎉 INSTALLATION COMPLETE! 🎉" -ForegroundColor Green
-Write-Host "1. Open 'Biometric Setup' on your Desktop to pair your phone."
-Write-Host "2. Save your Windows credentials in the Setup App."
-Write-Host "3. Press Win+L to lock your screen and test the unlock from your phone!"
+Write-Host "🎉 INSTALLATION & AUTO-START COMPLETE! 🎉" -ForegroundColor Green
+Write-Host "1. Both Background Service & Clipboard Sync Helper are configured to auto-start on Windows startup."
+Write-Host "2. Open 'Biometric Setup' to pair your phone."
+Write-Host "3. Save your Windows credentials in the Setup App."
+Write-Host "4. Press Win+L to lock your screen and test unlock from phone!"
 Write-Host "===============================================" -ForegroundColor Cyan

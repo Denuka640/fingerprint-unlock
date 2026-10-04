@@ -24,6 +24,7 @@ class BleClientManager private constructor(private val context: Context) {
         val CHALLENGE_CHAR_UUID: UUID = UUID.fromString("7B37A55C-3BF2-4D3E-A59B-51421DA10003")
         val AUTH_RESPONSE_CHAR_UUID: UUID = UUID.fromString("7B37A55C-3BF2-4D3E-A59B-51421DA10004")
         val PAIRING_CHAR_UUID: UUID = UUID.fromString("7B37A55C-3BF2-4D3E-A59B-51421DA10005")
+        val CLIPBOARD_CHAR_UUID: UUID = UUID.fromString("7B37A55C-3BF2-4D3E-A59B-51421DA10006")
 
         private const val TAG = "BleClientManager"
 
@@ -265,6 +266,28 @@ class BleClientManager private constructor(private val context: Context) {
         char.value = baos.toByteArray()
         char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         bluetoothGatt?.writeCharacteristic(char)
+    }
+
+    fun sendClipboardData(text: String): Boolean {
+        val gatt = bluetoothGatt ?: return false
+        val service = gatt.getService(SERVICE_UUID) ?: return false
+        val char = service.getCharacteristic(CLIPBOARD_CHAR_UUID) ?: return false
+
+        val deviceId = Build.MODEL ?: "AndroidPhone"
+        val devIdBytes = deviceId.toByteArray(StandardCharsets.UTF_8)
+        val textBytes = text.toByteArray(StandardCharsets.UTF_8)
+
+        val baos = ByteArrayOutputStream()
+        val dos = DataOutputStream(baos)
+        dos.writeByte(devIdBytes.size)
+        dos.write(devIdBytes)
+        dos.writeInt(textBytes.size)
+        dos.write(textBytes)
+        dos.flush()
+
+        char.value = baos.toByteArray()
+        char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        return gatt.writeCharacteristic(char)
     }
 
     fun isConnected(): Boolean = bluetoothGatt != null

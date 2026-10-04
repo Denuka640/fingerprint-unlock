@@ -14,6 +14,7 @@ public class BleGattServerManager : IAsyncDisposable
     public static readonly Guid ChallengeCharUuid = Guid.Parse("7B37A55C-3BF2-4D3E-A59B-51421DA10003");
     public static readonly Guid AuthResponseCharUuid = Guid.Parse("7B37A55C-3BF2-4D3E-A59B-51421DA10004");
     public static readonly Guid PairingCharUuid = Guid.Parse("7B37A55C-3BF2-4D3E-A59B-51421DA10005");
+    public static readonly Guid ClipboardCharUuid = Guid.Parse("7B37A55C-3BF2-4D3E-A59B-51421DA10006");
 
     private readonly CryptoEngine _crypto;
     private readonly DpapiVault _vault;
@@ -24,6 +25,7 @@ public class BleGattServerManager : IAsyncDisposable
     private GattLocalCharacteristic? _challengeChar;
     private GattLocalCharacteristic? _authResponseChar;
     private GattLocalCharacteristic? _pairingChar;
+    private GattLocalCharacteristic? _clipboardChar;
 
     private byte[] _currentChallenge = Array.Empty<byte>();
 
@@ -97,6 +99,16 @@ public class BleGattServerManager : IAsyncDisposable
             var pairingResult = await _serviceProvider.Service.CreateCharacteristicAsync(PairingCharUuid, pairingParams);
             _pairingChar = pairingResult.Characteristic;
             _pairingChar.WriteRequested += PairingChar_WriteRequested;
+
+            // 5. Clipboard Characteristic (Write)
+            var clipboardParams = new GattLocalCharacteristicParameters
+            {
+                CharacteristicProperties = GattCharacteristicProperties.Write | GattCharacteristicProperties.WriteWithoutResponse,
+                WriteProtectionLevel = GattProtectionLevel.Plain
+            };
+            var clipboardResult = await _serviceProvider.Service.CreateCharacteristicAsync(ClipboardCharUuid, clipboardParams);
+            _clipboardChar = clipboardResult.Characteristic;
+            _clipboardChar.WriteRequested += ClipboardChar_WriteRequested;
 
             // Start Advertising
             var advParams = new GattServiceProviderAdvertisingParameters
@@ -286,6 +298,61 @@ public class BleGattServerManager : IAsyncDisposable
             catch (Exception ex)
             {
                 OnLog?.Invoke($"Pairing error: {ex.Message}");
+            }
+            finally
+            {
+                deferral.Complete();
+            }
+        });
+    }
+
+    private void ClipboardChar_WriteRequested(GattLocalCharacteristic sender, GattWriteRequestedEventArgs args)
+    {
+        var deferral = args.GetDeferral();
+        Task.Run(async () =>
+        {
+            try
+            {
+                var request = await args.GetRequestAsync();
+                var reader = DataReader.FromBuffer(request.Value);
+                byte[] data = new byte[request.Value.Length];
+                reader.ReadBytes(data);
+
+                if (data.Length < 5) return;
+
+                using var ms = new MemoryStream(data);
+                using var br = new BinaryReader(ms);
+                byte devIdLen = br.ReadByte();
+                string deviceId = System.Text.Encoding.UTF8.GetString(br.ReadBytes(devIdLen));
+
+                byte b0 = br.ReadByte();
+                byte b1 = br.ReadByte();
+                byte b2 = br.ReadByte();
+                byte b3 = br.ReadByte();
+                int textLen = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+
+                if (textLen < 0 || textLen > 5000) return;
+
+                string text = System.Text.Encoding.UTF8.GetString(br.ReadBytes(textLen));
+
+                var pairedDev = _vault.FindPairedDevice(deviceId);
+                if (pairedDev == null)
+                {
+                    OnLog?.Invoke($"[BLE Clipboard] Unknown device {deviceId}. Ignored.");
+                    return;
+                }
+
+                OnLog?.Invoke($"[BLE Clipboard] Received clipboard text from '{pairedDev.DeviceName}'. Broadcasting...");
+                await _pipeServer.BroadcastClipboardAsync(text);
+
+                if (request.Option == GattWriteOption.WriteWithResponse)
+                {
+                    request.Respond();
+                }
+            }
+            catch (Exception ex)
+            {
+                OnLog?.Invoke($"[BLE Clipboard] Error: {ex.Message}");
             }
             finally
             {
