@@ -80,3 +80,7 @@ To completely remove the service, credential provider, and shortcuts:
    .\uninstall.ps1
    ```
 3. It will prompt you if you wish to wipe the securely stored credentials.
+
+---
+*Designed by Denuka*
+

@@ -134,7 +134,10 @@
             <DockPanel>
                 <TextBlock Text="Service Status: " Foreground="{StaticResource TextSecondary}" FontSize="12"/>
                 <TextBlock x:Name="TxtServiceStatus" Text="Ready &amp; Listening" Foreground="{StaticResource AccentSuccess}" FontWeight="SemiBold" FontSize="12"/>
-                <TextBlock Text="Lock screen: Win + L to test" Foreground="{StaticResource TextSecondary}" FontSize="12" HorizontalAlignment="Right"/>
+                
+                <TextBlock Text="Designed by Denuka" Foreground="#64748B" FontSize="11" HorizontalAlignment="Center" DockPanel.Dock="Right" Margin="16,0,0,0"/>
+
+                <TextBlock Text="Lock screen: Win + L to test" Foreground="{StaticResource TextSecondary}" FontSize="12" HorizontalAlignment="Right" DockPanel.Dock="Right"/>
             </DockPanel>
         </Border>
     </Grid>
