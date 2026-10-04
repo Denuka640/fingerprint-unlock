@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using BiometricUnlock.Service.Crypto;
 using BiometricUnlock.Service.Ipc;
 using BiometricUnlock.Service.Security;
@@ -11,8 +12,10 @@ public class LocalNetworkManager : IAsyncDisposable
     private readonly DpapiVault _vault;
     private readonly PipeServer _pipeServer;
     private readonly HttpListener _listener;
+    private UdpClient? _udpListener;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
+    private Task? _udpListenTask;
 
     private byte[] _currentChallenge = Array.Empty<byte>();
 
@@ -44,13 +47,53 @@ public class LocalNetworkManager : IAsyncDisposable
             _listener.Start();
             _cts = new CancellationTokenSource();
             _listenTask = Task.Run(() => ListenLoopAsync(_cts.Token));
-            OnLog?.Invoke("Local Network (WiFi) Server started on port 9898.");
+            
+            StartUdpDiscoveryListener(_cts.Token);
+
+            OnLog?.Invoke("Local Network (WiFi) Server started on TCP 9898 & UDP 9899.");
         }
         catch (Exception ex)
         {
-            OnLog?.Invoke($"Failed to start HTTP server: {ex.Message}");
+            OnLog?.Invoke($"Failed to start HTTP/UDP server: {ex.Message}");
             // To bind to +:9898 without admin, we need urlacl, but running as a Windows Service (SYSTEM) bypasses this.
         }
+    }
+
+    private void StartUdpDiscoveryListener(CancellationToken ct)
+    {
+        _udpListenTask = Task.Run(async () =>
+        {
+            try
+            {
+                _udpListener = new UdpClient();
+                _udpListener.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                _udpListener.Client.Bind(new IPEndPoint(IPAddress.Any, 9899));
+
+                while (!ct.IsCancellationRequested)
+                {
+                    var receiveResult = await _udpListener.ReceiveAsync(ct);
+                    string message = System.Text.Encoding.UTF8.GetString(receiveResult.Buffer);
+                    
+                    if (message == "DISCOVER_FINGERPRINT_PC")
+                    {
+                        var responseData = new
+                        {
+                            MachineName = Environment.MachineName,
+                            Port = 9898
+                        };
+                        string json = System.Text.Json.JsonSerializer.Serialize(responseData);
+                        byte[] responseBytes = System.Text.Encoding.UTF8.GetBytes(json);
+
+                        await _udpListener.SendAsync(responseBytes, responseBytes.Length, receiveResult.RemoteEndPoint);
+                        OnLog?.Invoke($"[WiFi Discovery] Responded to discovery ping from {receiveResult.RemoteEndPoint.Address}");
+                    }
+                }
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                OnLog?.Invoke($"UDP Discovery Listener warning: {ex.Message}");
+            }
+        }, ct);
     }
 
     private async Task ListenLoopAsync(CancellationToken ct)
@@ -197,6 +240,8 @@ public class LocalNetworkManager : IAsyncDisposable
     public ValueTask DisposeAsync()
     {
         _cts?.Cancel();
+        try { _udpListener?.Close(); } catch { }
+        try { _udpListener?.Dispose(); } catch { }
         _listener.Stop();
         _listener.Close();
         return ValueTask.CompletedTask;

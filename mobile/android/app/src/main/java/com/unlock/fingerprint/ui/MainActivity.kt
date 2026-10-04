@@ -26,6 +26,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var txtStatus: TextView
     private lateinit var txtRssi: TextView
+    private lateinit var txtPairedPc: TextView
     private lateinit var btnScan: Button
     private lateinit var btnUnlock: Button
     private lateinit var btnPair: Button
@@ -49,6 +50,7 @@ class MainActivity : AppCompatActivity() {
 
         txtStatus = findViewById(R.id.txtStatus)
         txtRssi = findViewById(R.id.txtRssi)
+        txtPairedPc = findViewById(R.id.txtPairedPc)
         btnScan = findViewById(R.id.btnScan)
         btnUnlock = findViewById(R.id.btnUnlock)
         btnPair = findViewById(R.id.btnPair)
@@ -58,10 +60,6 @@ class MainActivity : AppCompatActivity() {
 
         bleManager = BleClientManager.getInstance(this)
         tcpManager = com.unlock.fingerprint.network.TcpClientManager.getInstance(this)
-        
-        // Load saved IP
-        val prefs = getSharedPreferences("UnlockPrefs", MODE_PRIVATE)
-        tcpManager.currentIpAddress = prefs.getString("PC_IP_ADDRESS", null)
 
         biometricHelper = BiometricPromptHelper(
             this,
@@ -103,53 +101,17 @@ class MainActivity : AppCompatActivity() {
 
         bleManager.onUnlockSuccess = {
             runOnUiThread {
+                txtStatus.text = "✓ Laptop Unlocked Successfully!"
                 Toast.makeText(this, "✓ Laptop Unlocked Successfully!", Toast.LENGTH_LONG).show()
             }
         }
 
         btnScan.setOnClickListener {
-            // Check WiFi connection first
-            lifecycleScope.launch {
-                txtStatus.text = "Checking WiFi connection..."
-                val challengeBytes = tcpManager.getChallenge()
-                if (challengeBytes != null) {
-                    currentChallenge = challengeBytes
-                    runOnUiThread {
-                        txtStatus.text = "Challenge Received via WiFi"
-                        biometricHelper.showBiometricPrompt(challengeBytes)
-                    }
-                } else {
-                    runOnUiThread {
-                        txtStatus.text = "WiFi failed. Scanning BLE..."
-                        checkAndRequestPermissions()
-                    }
-                }
-            }
+            triggerReconnectAndUnlock(showPrompt = false)
         }
 
         btnUnlock.setOnClickListener {
-            currentChallenge?.let {
-                biometricHelper.showBiometricPrompt(it)
-                currentChallenge = null
-            } ?: run {
-                // Check WiFi connection first
-                lifecycleScope.launch {
-                    txtStatus.text = "Requesting unlock via WiFi..."
-                    val challengeBytes = tcpManager.getChallenge()
-                    if (challengeBytes != null) {
-                        currentChallenge = challengeBytes
-                        runOnUiThread {
-                            txtStatus.text = "Challenge Received via WiFi"
-                            biometricHelper.showBiometricPrompt(challengeBytes)
-                        }
-                    } else {
-                        runOnUiThread {
-                            txtStatus.text = "WiFi failed. Trying BLE..."
-                            bleManager.requestChallenge()
-                        }
-                    }
-                }
-            }
+            triggerReconnectAndUnlock(showPrompt = true)
         }
 
         btnPair.setOnClickListener {
@@ -169,6 +131,52 @@ class MainActivity : AppCompatActivity() {
         }
 
         checkAndRequestPermissions()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshPairedDeviceDisplay()
+    }
+
+    private fun refreshPairedDeviceDisplay() {
+        val prefs = getSharedPreferences("UnlockPrefs", MODE_PRIVATE)
+        val ip = prefs.getString("PC_IP_ADDRESS", null)
+        val machine = prefs.getString("PAIRED_MACHINE_NAME", "Windows PC")
+        tcpManager.currentIpAddress = ip
+
+        if (ip != null) {
+            txtPairedPc.text = "Paired: $machine ($ip)"
+        } else {
+            txtPairedPc.text = "Paired: None (Tap 'Pair PC' to scan QR)"
+        }
+    }
+
+    private fun triggerReconnectAndUnlock(showPrompt: Boolean) {
+        lifecycleScope.launch {
+            txtStatus.text = "Connecting to Laptop..."
+            val challengeBytes = tcpManager.getChallenge()
+            if (challengeBytes != null) {
+                currentChallenge = challengeBytes
+                refreshPairedDeviceDisplay()
+                runOnUiThread {
+                    txtStatus.text = "Ready to Unlock via WiFi"
+                    if (showPrompt) {
+                        biometricHelper.showBiometricPrompt(challengeBytes)
+                    } else {
+                        Toast.makeText(this@MainActivity, "Connected to Laptop via WiFi!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } else {
+                runOnUiThread {
+                    txtStatus.text = "WiFi offline. Trying Bluetooth..."
+                    if (showPrompt) {
+                        bleManager.requestChallenge()
+                    } else {
+                        checkAndRequestPermissions()
+                    }
+                }
+            }
+        }
     }
 
     private fun checkAndRequestPermissions() {

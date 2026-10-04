@@ -24,12 +24,24 @@
         android:id="@+id/txtSubtitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Secure Bluetooth Biometric Gateway"
+        android:text="Secure Biometric Laptop Unlock"
         android:textColor="#94A3B8"
         android:textSize="13sp"
         app:layout_constraintTop_toBottomOf="@id/txtTitle"
         app:layout_constraintStart_toStartOf="parent"
         android:layout_marginTop="4dp" />
+
+    <TextView
+        android:id="@+id/txtPairedPc"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Paired: Not paired yet (Scan QR)"
+        android:textColor="#60A5FA"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        app:layout_constraintTop_toBottomOf="@id/txtSubtitle"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="6dp" />
 
     <!-- Status Card -->
     <com.google.android.material.card.MaterialCardView
@@ -41,8 +53,8 @@
         app:strokeWidth="1dp"
         app:cardCornerRadius="24dp"
         app:cardElevation="0dp"
-        android:layout_marginTop="32dp"
-        app:layout_constraintTop_toBottomOf="@id/txtSubtitle">
+        android:layout_marginTop="20dp"
+        app:layout_constraintTop_toBottomOf="@id/txtPairedPc">
 
         <LinearLayout
             android:layout_width="match_parent"

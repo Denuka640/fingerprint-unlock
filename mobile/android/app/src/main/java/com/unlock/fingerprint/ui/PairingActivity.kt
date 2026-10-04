@@ -32,12 +32,14 @@ class PairingActivity : AppCompatActivity() {
                 val machineName = json.optString("MachineName", "Windows PC")
                 
                 // Extract IP for WiFi
-                val ipAddress = json.optString("IPAddress", null)
+                val ipAddress = if (json.has("IPAddress")) json.getString("IPAddress") else null
+                val prefs = getSharedPreferences("UnlockPrefs", MODE_PRIVATE)
+                val editor = prefs.edit().putString("PAIRED_MACHINE_NAME", machineName)
                 if (ipAddress != null) {
-                    val prefs = getSharedPreferences("UnlockPrefs", MODE_PRIVATE)
-                    prefs.edit().putString("PC_IP_ADDRESS", ipAddress).apply()
-                    tcpManager.currentIpAddress = ipAddress
+                    editor.putString("PC_IP_ADDRESS", ipAddress)
+                    tcpManager.saveIpAddress(ipAddress, machineName)
                 }
+                editor.apply()
 
                 txtPairingInfo.text = "Sending pairing data to $machineName via WiFi..."
                 btnScanQr.isEnabled = false

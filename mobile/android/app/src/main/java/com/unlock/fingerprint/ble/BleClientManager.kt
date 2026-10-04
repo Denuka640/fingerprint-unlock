@@ -102,14 +102,39 @@ class BleClientManager private constructor(private val context: Context) {
     }
 
     fun connectToDevice(device: BluetoothDevice) {
+        saveMacAddress(device.address)
         _connectionState.value = "Connecting to ${device.name ?: "PC"}..."
         bluetoothGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+    }
+
+    fun saveMacAddress(mac: String) {
+        val prefs = context.getSharedPreferences("UnlockPrefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("PAIRED_BLE_MAC", mac).apply()
+    }
+
+    fun getSavedMacAddress(): String? {
+        val prefs = context.getSharedPreferences("UnlockPrefs", Context.MODE_PRIVATE)
+        return prefs.getString("PAIRED_BLE_MAC", null)
+    }
+
+    fun connectToSavedMac(): Boolean {
+        val mac = getSavedMacAddress() ?: return false
+        val adapter = bluetoothAdapter ?: return false
+        try {
+            val device = adapter.getRemoteDevice(mac)
+            connectToDevice(device)
+            return true
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to connect to saved MAC $mac: ${e.message}")
+        }
+        return false
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 _connectionState.value = "Connected"
+                gatt.device?.address?.let { saveMacAddress(it) }
                 gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 _connectionState.value = "Disconnected"
@@ -186,6 +211,12 @@ class BleClientManager private constructor(private val context: Context) {
     }
 
     fun requestChallenge() {
+        if (bluetoothGatt == null) {
+            if (!connectToSavedMac()) {
+                startScan()
+            }
+            return
+        }
         val service = bluetoothGatt?.getService(SERVICE_UUID) ?: return
         val char = service.getCharacteristic(CHALLENGE_CHAR_UUID) ?: return
         bluetoothGatt?.readCharacteristic(char)
