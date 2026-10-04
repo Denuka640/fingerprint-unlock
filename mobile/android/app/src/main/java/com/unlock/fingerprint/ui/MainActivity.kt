@@ -85,6 +85,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val btnEnableAccessibility = findViewById<Button>(R.id.btnEnableAccessibility)
+        btnEnableAccessibility.setOnClickListener {
+            try {
+                val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                startActivity(intent)
+                Toast.makeText(this, "Turn ON 'Fingerprint PC Auto Clipboard Sync'", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Could not open settings: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         biometricHelper = BiometricPromptHelper(
             this,
             onAuthSuccess = { signature ->
