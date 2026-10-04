@@ -46,21 +46,7 @@ class ClipboardSyncManager(private val context: Context) {
             } catch (_: Exception) {}
         }
 
-    private var lastSyncedText: String?
-        get() {
-            return try {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                prefs.getString(KEY_LAST_SYNCED, null)
-            } catch (e: Exception) {
-                null
-            }
-        }
-        set(value) {
-            try {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                prefs.edit().putString(KEY_LAST_SYNCED, value).apply()
-            } catch (_: Exception) {}
-        }
+    private var lastSyncedText: String? = null
 
     private val clipChangedListener = ClipboardManager.OnPrimaryClipChangedListener {
         if (isAutoSyncEnabled) {
@@ -70,6 +56,9 @@ class ClipboardSyncManager(private val context: Context) {
 
     fun startListening() {
         try {
+            if (clipboardManager == null) {
+                clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            }
             clipboardManager?.removePrimaryClipChangedListener(clipChangedListener)
             clipboardManager?.addPrimaryClipChangedListener(clipChangedListener)
         } catch (e: Exception) {
@@ -90,8 +79,16 @@ class ClipboardSyncManager(private val context: Context) {
         if (!isAutoSyncEnabled) return
 
         try {
-            val cm = clipboardManager ?: return
-            val primaryClip = cm.primaryClip
+            val cm = clipboardManager ?: (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
+            if (cm == null) return
+            
+            val primaryClip = try {
+                if (cm.hasPrimaryClip()) cm.primaryClip else null
+            } catch (e: Exception) {
+                Log.d(TAG, "Background clip read info: ${e.message}")
+                null
+            }
+
             if (primaryClip != null && primaryClip.itemCount > 0) {
                 val item = primaryClip.getItemAt(0)
                 val text = item.text?.toString() ?: item.coerceToText(context)?.toString()
@@ -108,9 +105,14 @@ class ClipboardSyncManager(private val context: Context) {
 
     fun syncCurrentClipboard(onResult: (Boolean, String) -> Unit) {
         try {
-            val cm = clipboardManager
+            val cm = clipboardManager ?: (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
             if (cm == null) {
                 onResult(false, "Clipboard unavailable on this device")
+                return
+            }
+
+            if (!cm.hasPrimaryClip()) {
+                onResult(false, "Phone clipboard is empty")
                 return
             }
 

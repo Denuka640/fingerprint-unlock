@@ -230,8 +230,7 @@ class TcpClientManager private constructor(private val context: Context) {
         return@withContext false
     }
 
-    suspend fun sendClipboardData(deviceId: String, text: String): Boolean = withContext(Dispatchers.IO) {
-        val ip = currentIpAddress ?: discoverPcIpOnLan() ?: return@withContext false
+    private fun tryHttpClipboard(ip: String, deviceId: String, text: String): Boolean {
         try {
             val url = URL("http://$ip:$currentPort/clipboard")
             val connection = url.openConnection() as HttpURLConnection
@@ -253,10 +252,33 @@ class TcpClientManager private constructor(private val context: Context) {
             output.flush()
             output.close()
 
-            return@withContext connection.responseCode == 200
+            if (connection.responseCode == 200) {
+                saveIpAddress(ip)
+                return true
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to send clipboard data over WiFi: ${e.message}")
+            Log.w(TAG, "Failed HTTP clipboard send to $ip: ${e.message}")
         }
+        return false
+    }
+
+    suspend fun sendClipboardData(deviceId: String, text: String): Boolean = withContext(Dispatchers.IO) {
+        val savedIp = currentIpAddress
+        if (savedIp != null) {
+            if (tryHttpClipboard(savedIp, deviceId, text)) {
+                return@withContext true
+            }
+            Log.i(TAG, "Stored IP ($savedIp) unreachable for clipboard. Attempting LAN UDP discovery...")
+        }
+
+        // Auto-heal IP address using LAN UDP discovery if stored IP failed or was missing
+        val discoveredIp = discoverPcIpOnLan()
+        if (discoveredIp != null) {
+            if (tryHttpClipboard(discoveredIp, deviceId, text)) {
+                return@withContext true
+            }
+        }
+
         return@withContext false
     }
 }

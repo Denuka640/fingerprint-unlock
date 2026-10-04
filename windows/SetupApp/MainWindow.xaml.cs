@@ -129,16 +129,30 @@ public partial class MainWindow : Window
                         string text = msg.StatusMessage;
                         Dispatcher.Invoke(() =>
                         {
-                            try
+                            bool success = false;
+                            for (int attempt = 0; attempt < 10; attempt++)
                             {
-                                System.Windows.Clipboard.SetText(text);
+                                try
+                                {
+                                    System.Windows.Clipboard.SetDataObject(text, true);
+                                    success = true;
+                                    break;
+                                }
+                                catch (System.Runtime.InteropServices.COMException)
+                                {
+                                    Thread.Sleep(50);
+                                }
+                                catch
+                                {
+                                    break;
+                                }
+                            }
+
+                            if (success)
+                            {
                                 TxtServiceStatus.Text = $"📋 Copied to Windows Clipboard from Phone! ({text.Length} chars)";
                                 string preview = text.Length > 30 ? text.Substring(0, 30) + "..." : text;
                                 _notifyIcon?.ShowBalloonTip(2500, "Clipboard Synced 📋", $"Copied from Phone: {preview}", System.Windows.Forms.ToolTipIcon.Info);
-                            }
-                            catch (Exception ex)
-                            {
-                                TxtServiceStatus.Text = $"Clipboard Sync Warning: {ex.Message}";
                             }
                         });
                     }

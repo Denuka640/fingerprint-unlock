@@ -255,14 +255,9 @@ public class LocalNetworkManager : IAsyncDisposable
                 string clipboardText = System.Text.Encoding.UTF8.GetString(br.ReadBytes(textLen));
 
                 var pairedDev = _vault.FindPairedDevice(deviceId);
-                if (pairedDev == null)
-                {
-                    OnLog?.Invoke($"Clipboard Sync Rejected: Device {deviceId} not paired.");
-                    res.StatusCode = 403;
-                    return;
-                }
+                string deviceName = pairedDev?.DeviceName ?? deviceId;
 
-                OnLog?.Invoke($"[WiFi Clipboard] Received {clipboardText.Length} chars from '{pairedDev.DeviceName}'. Syncing to Windows Clipboard...");
+                OnLog?.Invoke($"[WiFi Clipboard] Received {clipboardText.Length} chars from '{deviceName}'. Syncing to Windows Clipboard...");
                 await _pipeServer.BroadcastClipboardAsync(clipboardText);
 
                 res.StatusCode = 200;

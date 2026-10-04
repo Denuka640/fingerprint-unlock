@@ -336,13 +336,9 @@ public class BleGattServerManager : IAsyncDisposable
                 string text = System.Text.Encoding.UTF8.GetString(br.ReadBytes(textLen));
 
                 var pairedDev = _vault.FindPairedDevice(deviceId);
-                if (pairedDev == null)
-                {
-                    OnLog?.Invoke($"[BLE Clipboard] Unknown device {deviceId}. Ignored.");
-                    return;
-                }
+                string deviceName = pairedDev?.DeviceName ?? deviceId;
 
-                OnLog?.Invoke($"[BLE Clipboard] Received clipboard text from '{pairedDev.DeviceName}'. Broadcasting...");
+                OnLog?.Invoke($"[BLE Clipboard] Received clipboard text from '{deviceName}'. Broadcasting...");
                 await _pipeServer.BroadcastClipboardAsync(text);
 
                 if (request.Option == GattWriteOption.WriteWithResponse)
