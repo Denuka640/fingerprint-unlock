@@ -18,6 +18,14 @@ public class LocalNetworkManager : IAsyncDisposable
 
     public event Action<string>? OnLog;
 
+    // Java DataOutputStream.writeShort() is big-endian, C# BinaryReader.ReadUInt16() is little-endian.
+    private static ushort ReadUInt16BE(BinaryReader br)
+    {
+        byte hi = br.ReadByte();
+        byte lo = br.ReadByte();
+        return (ushort)((hi << 8) | lo);
+    }
+
     public LocalNetworkManager(CryptoEngine crypto, DpapiVault vault, PipeServer pipeServer)
     {
         _crypto = crypto;
@@ -98,10 +106,10 @@ public class LocalNetworkManager : IAsyncDisposable
                 byte devIdLen = br.ReadByte();
                 string deviceId = System.Text.Encoding.UTF8.GetString(br.ReadBytes(devIdLen));
                 
-                ushort sigLen = br.ReadUInt16();
+                ushort sigLen = ReadUInt16BE(br);
                 byte[] signature = br.ReadBytes(sigLen);
                 
-                ushort chalLen = br.ReadUInt16();
+                ushort chalLen = ReadUInt16BE(br);
                 byte[] receivedChallenge = br.ReadBytes(chalLen);
 
                 if (!_crypto.ValidateChallenge(receivedChallenge))
@@ -162,7 +170,7 @@ public class LocalNetworkManager : IAsyncDisposable
                 byte devNameLen = br.ReadByte();
                 string deviceName = System.Text.Encoding.UTF8.GetString(br.ReadBytes(devNameLen));
                 
-                ushort pubKeyLen = br.ReadUInt16();
+                ushort pubKeyLen = ReadUInt16BE(br);
                 byte[] pubKey = br.ReadBytes(pubKeyLen);
 
                 _vault.AddPairedDevice(deviceId, deviceName, pubKey);

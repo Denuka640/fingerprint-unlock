@@ -29,6 +29,15 @@ public class BleGattServerManager : IAsyncDisposable
 
     public event Action<string>? OnLog;
 
+    // Java DataOutputStream.writeShort() is big-endian, C# BinaryReader.ReadUInt16() is little-endian.
+    // This helper reads a 2-byte unsigned short in big-endian (network) byte order.
+    private static ushort ReadUInt16BE(BinaryReader br)
+    {
+        byte hi = br.ReadByte();
+        byte lo = br.ReadByte();
+        return (ushort)((hi << 8) | lo);
+    }
+
     public BleGattServerManager(CryptoEngine crypto, DpapiVault vault, PipeServer pipeServer)
     {
         _crypto = crypto;
@@ -176,9 +185,9 @@ public class BleGattServerManager : IAsyncDisposable
                 using var br = new BinaryReader(ms);
                 byte devIdLen = br.ReadByte();
                 string deviceId = System.Text.Encoding.UTF8.GetString(br.ReadBytes(devIdLen));
-                ushort sigLen = br.ReadUInt16();
+                ushort sigLen = ReadUInt16BE(br);
                 byte[] signature = br.ReadBytes(sigLen);
-                ushort chalLen = br.ReadUInt16();
+                ushort chalLen = ReadUInt16BE(br);
                 byte[] receivedChallenge = br.ReadBytes(chalLen);
 
                 // 1. Verify Challenge Freshness & Nonce
@@ -263,7 +272,7 @@ public class BleGattServerManager : IAsyncDisposable
                 string deviceId = System.Text.Encoding.UTF8.GetString(br.ReadBytes(devIdLen));
                 byte devNameLen = br.ReadByte();
                 string deviceName = System.Text.Encoding.UTF8.GetString(br.ReadBytes(devNameLen));
-                ushort pubKeyLen = br.ReadUInt16();
+                ushort pubKeyLen = ReadUInt16BE(br);
                 byte[] pubKey = br.ReadBytes(pubKeyLen);
 
                 _vault.AddPairedDevice(deviceId, deviceName, pubKey);
