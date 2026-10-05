@@ -129,30 +129,25 @@ public partial class MainWindow : Window
                         string text = msg.StatusMessage;
                         Dispatcher.Invoke(() =>
                         {
-                            bool success = false;
                             for (int attempt = 0; attempt < 10; attempt++)
                             {
                                 try
                                 {
-                                    System.Windows.Clipboard.SetDataObject(text, true);
-                                    success = true;
+                                    System.Windows.Clipboard.SetText(text);
+                                    TxtServiceStatus.Text = $"📋 Copied to Windows Clipboard from Phone! ({text.Length} chars)";
+                                    string preview = text.Length > 30 ? text.Substring(0, 30) + "..." : text;
+                                    _notifyIcon?.ShowBalloonTip(2500, "Clipboard Synced 📋", $"Copied from Phone: {preview}", System.Windows.Forms.ToolTipIcon.Info);
                                     break;
                                 }
                                 catch (System.Runtime.InteropServices.COMException)
                                 {
                                     Thread.Sleep(50);
                                 }
-                                catch
+                                catch (Exception ex)
                                 {
+                                    TxtServiceStatus.Text = $"Clipboard Warning: {ex.Message}";
                                     break;
                                 }
-                            }
-
-                            if (success)
-                            {
-                                TxtServiceStatus.Text = $"📋 Copied to Windows Clipboard from Phone! ({text.Length} chars)";
-                                string preview = text.Length > 30 ? text.Substring(0, 30) + "..." : text;
-                                _notifyIcon?.ShowBalloonTip(2500, "Clipboard Synced 📋", $"Copied from Phone: {preview}", System.Windows.Forms.ToolTipIcon.Info);
                             }
                         });
                     }
