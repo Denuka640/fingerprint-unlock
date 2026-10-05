@@ -237,6 +237,7 @@ class TcpClientManager private constructor(private val context: Context) {
             connection.requestMethod = "POST"
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/octet-stream")
+            connection.setRequestProperty("Connection", "close")
             connection.connectTimeout = 3000
             connection.readTimeout = 3000
 

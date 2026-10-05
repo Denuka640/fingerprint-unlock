@@ -70,9 +70,29 @@ class ClipboardAccessibilityService : AccessibilityService() {
         }
     }
 
+    private var lastListenerCheckTimeMs: Long = 0L
+
+    private fun ensureListenerRegistered() {
+        val now = System.currentTimeMillis()
+        if (now - lastListenerCheckTimeMs < 15000) return
+        lastListenerCheckTimeMs = now
+
+        try {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            if (cm != null) {
+                clipboardManager = cm
+                cm.removePrimaryClipChangedListener(clipChangedListener)
+                cm.addPrimaryClipChangedListener(clipChangedListener)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to re-register clip listener: ${e.message}")
+        }
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         try {
+            ensureListenerRegistered()
             syncManager?.checkAndAutoSyncIfNewText()
         } catch (e: Exception) {
             Log.w(TAG, "Error handling accessibility event: ${e.message}")
