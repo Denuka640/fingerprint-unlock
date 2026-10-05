@@ -47,10 +47,11 @@ class ClipboardSyncManager(private val context: Context) {
         }
 
     private var lastSyncedText: String? = null
+    private var lastSyncedTimeMs: Long = 0L
 
     private val clipChangedListener = ClipboardManager.OnPrimaryClipChangedListener {
         if (isAutoSyncEnabled) {
-            checkAndAutoSyncIfNewText()
+            checkAndAutoSyncIfNewText(force = true)
         }
     }
 
@@ -75,13 +76,16 @@ class ClipboardSyncManager(private val context: Context) {
     /**
      * Checks if current clipboard has new text since last sync and automatically sends it.
      */
-    fun checkAndAutoSyncIfNewText(onResult: ((Boolean, String) -> Unit)? = null) {
-        if (!isAutoSyncEnabled) return
+    fun checkAndAutoSyncIfNewText(force: Boolean = false, onResult: ((Boolean, String) -> Unit)? = null) {
+        if (!isAutoSyncEnabled && !force) return
 
         try {
             val cm = clipboardManager ?: (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
-            if (cm == null) return
-            
+            if (cm == null) {
+                onResult?.invoke(false, "Clipboard unavailable")
+                return
+            }
+
             val primaryClip = try {
                 if (cm.hasPrimaryClip()) cm.primaryClip else null
             } catch (e: Exception) {
@@ -93,48 +97,32 @@ class ClipboardSyncManager(private val context: Context) {
                 val item = primaryClip.getItemAt(0)
                 val text = item.text?.toString() ?: item.coerceToText(context)?.toString()
 
-                if (!text.isNullOrBlank() && text != lastSyncedText) {
-                    lastSyncedText = text
-                    sendClipboardToPc(text, onResult)
+                if (!text.isNullOrBlank()) {
+                    val now = System.currentTimeMillis()
+                    // Send if explicitly forced, if text changed, or if > 3 seconds passed
+                    if (force || text != lastSyncedText || (now - lastSyncedTimeMs) > 3000) {
+                        sendClipboardToPc(text) { success, msg ->
+                            if (success) {
+                                lastSyncedText = text
+                                lastSyncedTimeMs = System.currentTimeMillis()
+                            }
+                            onResult?.invoke(success, msg)
+                        }
+                    }
+                } else if (force) {
+                    onResult?.invoke(false, "No text found in clipboard")
                 }
+            } else if (force) {
+                onResult?.invoke(false, "Phone clipboard is empty")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error checking clipboard text: ${e.message}")
+            if (force) onResult?.invoke(false, "Clipboard error: ${e.message}")
         }
     }
 
     fun syncCurrentClipboard(onResult: (Boolean, String) -> Unit) {
-        try {
-            val cm = clipboardManager ?: (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
-            if (cm == null) {
-                onResult(false, "Clipboard unavailable on this device")
-                return
-            }
-
-            if (!cm.hasPrimaryClip()) {
-                onResult(false, "Phone clipboard is empty")
-                return
-            }
-
-            val primaryClip = cm.primaryClip
-            if (primaryClip == null || primaryClip.itemCount == 0) {
-                onResult(false, "Phone clipboard is empty")
-                return
-            }
-
-            val item = primaryClip.getItemAt(0)
-            val text = item.text?.toString() ?: item.coerceToText(context)?.toString()
-
-            if (text.isNullOrBlank()) {
-                onResult(false, "No text found in clipboard")
-                return
-            }
-
-            lastSyncedText = text
-            sendClipboardToPc(text, onResult)
-        } catch (e: Exception) {
-            onResult(false, "Failed to access clipboard: ${e.message}")
-        }
+        checkAndAutoSyncIfNewText(force = true, onResult = onResult)
     }
 
     fun sendClipboardToPc(text: String, onResult: ((Boolean, String) -> Unit)?) {

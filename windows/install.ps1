@@ -40,6 +40,20 @@ if ($LASTEXITCODE -ne 0) {
     Exit 1
 }
 
+# 1b. Build Android App APK
+Write-Host "Building Android App APK..." -ForegroundColor Yellow
+$androidDir = Join-Path (Split-Path -Parent $scriptDir) "mobile\android"
+if (Test-Path "$androidDir\gradlew.bat") {
+    Push-Location "$androidDir"
+    & ".\gradlew.bat" assembleDebug --quiet
+    Pop-Location
+    $apkPath = "$androidDir\app\build\outputs\apk\debug\app-debug.apk"
+    if (Test-Path $apkPath) {
+        Copy-Item -Path $apkPath -Destination "$scriptDir\FingerprintUnlock.apk" -Force
+        Write-Host "Android APK built successfully and saved to: $scriptDir\FingerprintUnlock.apk" -ForegroundColor Green
+    }
+}
+
 # 2. Build the Credential Provider DLL (requires MSBuild)
 Write-Host "Building Credential Provider (Release|x64)..." -ForegroundColor Yellow
 $msbuildPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe
@@ -118,7 +132,8 @@ Start-Process -FilePath $setupAppPath
 Write-Host "`n===============================================" -ForegroundColor Cyan
 Write-Host "🎉 INSTALLATION & AUTO-START COMPLETE! 🎉" -ForegroundColor Green
 Write-Host "1. Both Background Service & Clipboard Sync Helper are configured to auto-start on Windows startup."
-Write-Host "2. Open 'Biometric Setup' to pair your phone."
-Write-Host "3. Save your Windows credentials in the Setup App."
-Write-Host "4. Press Win+L to lock your screen and test unlock from phone!"
+Write-Host "2. Updated Android APK created at: $scriptDir\FingerprintUnlock.apk"
+Write-Host "3. Open 'Biometric Setup' to pair your phone."
+Write-Host "4. Save your Windows credentials in the Setup App."
+Write-Host "5. Press Win+L to lock your screen and test unlock from phone!"
 Write-Host "===============================================" -ForegroundColor Cyan

@@ -263,7 +263,7 @@ class TcpClientManager private constructor(private val context: Context) {
     }
 
     suspend fun sendClipboardData(deviceId: String, text: String): Boolean = withContext(Dispatchers.IO) {
-        val savedIp = currentIpAddress
+        val savedIp = currentIpAddress ?: context.getSharedPreferences("UnlockPrefs", Context.MODE_PRIVATE).getString("PC_IP_ADDRESS", null)
         if (savedIp != null) {
             if (tryHttpClipboard(savedIp, deviceId, text)) {
                 return@withContext true

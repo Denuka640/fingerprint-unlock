@@ -7,8 +7,12 @@ import android.content.Context
 import android.os.Build
 import android.os.ParcelUuid
 import android.util.Log
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.nio.charset.StandardCharsets
@@ -56,6 +60,9 @@ class BleClientManager private constructor(private val context: Context) {
 
     private var isScanning = false
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    private var pendingConnectionDeferred: CompletableDeferred<Boolean>? = null
+    private var pendingWriteDeferred: CompletableDeferred<Boolean>? = null
 
     fun startScan() {
         if (isScanning || bluetoothGatt != null) return
@@ -131,23 +138,67 @@ class BleClientManager private constructor(private val context: Context) {
         return false
     }
 
+    suspend fun ensureConnectedAndServicesDiscovered(timeoutMs: Long = 6000): Boolean = withContext(Dispatchers.IO) {
+        val currentGatt = bluetoothGatt
+        if (currentGatt != null && (_connectionState.value == "Connected" || _connectionState.value == "Ready to Unlock")) {
+            val service = currentGatt.getService(SERVICE_UUID)
+            if (service != null) {
+                return@withContext true
+            }
+        }
+
+        Log.d(TAG, "BLE GATT disconnected or services unavailable. Auto-reconnecting to saved MAC...")
+        try {
+            bluetoothGatt?.close()
+        } catch (_: Exception) {}
+        bluetoothGatt = null
+
+        val deferred = CompletableDeferred<Boolean>()
+        pendingConnectionDeferred = deferred
+
+        val initiated = connectToSavedMac()
+        if (!initiated) {
+            Log.w(TAG, "No saved BLE MAC address found to reconnect.")
+            pendingConnectionDeferred = null
+            return@withContext false
+        }
+
+        val result = withTimeoutOrNull(timeoutMs) {
+            deferred.await()
+        } ?: false
+
+        if (!result) {
+            Log.w(TAG, "BLE auto-reconnect timed out or failed after ${timeoutMs}ms")
+        }
+        pendingConnectionDeferred = null
+        return@withContext result
+    }
+
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 _connectionState.value = "Connected"
                 gatt.device?.address?.let { saveMacAddress(it) }
+                try {
+                    gatt.requestMtu(512)
+                } catch (_: Exception) {}
                 gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 _connectionState.value = "Disconnected"
                 bluetoothGatt?.close()
                 bluetoothGatt = null
+                pendingConnectionDeferred?.complete(false)
+                pendingWriteDeferred?.complete(false)
             }
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 _connectionState.value = "Ready to Unlock"
+                pendingConnectionDeferred?.complete(true)
                 requestChallenge()
+            } else {
+                pendingConnectionDeferred?.complete(false)
             }
         }
 
@@ -157,10 +208,9 @@ class BleClientManager private constructor(private val context: Context) {
             status: Int
         ) {
             if (status == BluetoothGatt.GATT_SUCCESS && characteristic.uuid == CHALLENGE_CHAR_UUID) {
-                // Use deprecated API only for SDK < 33; use new API on Android 13+
                 @Suppress("DEPRECATION")
                 val data = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    characteristic.value // value is populated in legacy callback path
+                    characteristic.value
                 } else {
                     characteristic.value
                 }
@@ -169,7 +219,6 @@ class BleClientManager private constructor(private val context: Context) {
             }
         }
 
-        // Android 13+ (API 33) new callback signature with value parameter
         override fun onCharacteristicRead(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
@@ -199,6 +248,13 @@ class BleClientManager private constructor(private val context: Context) {
                     } else {
                         _connectionState.value = "Pairing Failed (status=$status)"
                         onPairingFailed?.invoke("BLE write failed with status $status")
+                    }
+                }
+                characteristic.uuid == CLIPBOARD_CHAR_UUID -> {
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        pendingWriteDeferred?.complete(true)
+                    } else {
+                        pendingWriteDeferred?.complete(false)
                     }
                 }
             }
@@ -268,10 +324,16 @@ class BleClientManager private constructor(private val context: Context) {
         bluetoothGatt?.writeCharacteristic(char)
     }
 
-    fun sendClipboardData(text: String): Boolean {
-        val gatt = bluetoothGatt ?: return false
-        val service = gatt.getService(SERVICE_UUID) ?: return false
-        val char = service.getCharacteristic(CLIPBOARD_CHAR_UUID) ?: return false
+    suspend fun sendClipboardData(text: String): Boolean = withContext(Dispatchers.IO) {
+        val isReady = ensureConnectedAndServicesDiscovered(6000)
+        if (!isReady) {
+            Log.w(TAG, "Cannot send clipboard data: BLE connection could not be established")
+            return@withContext false
+        }
+
+        val gatt = bluetoothGatt ?: return@withContext false
+        val service = gatt.getService(SERVICE_UUID) ?: return@withContext false
+        val char = service.getCharacteristic(CLIPBOARD_CHAR_UUID) ?: return@withContext false
 
         val deviceId = Build.MODEL ?: "AndroidPhone"
         val devIdBytes = deviceId.toByteArray(StandardCharsets.UTF_8)
@@ -285,9 +347,23 @@ class BleClientManager private constructor(private val context: Context) {
         dos.write(textBytes)
         dos.flush()
 
+        val writeDeferred = CompletableDeferred<Boolean>()
+        pendingWriteDeferred = writeDeferred
+
         char.value = baos.toByteArray()
         char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        return gatt.writeCharacteristic(char)
+        val initiated = gatt.writeCharacteristic(char)
+        if (!initiated) {
+            pendingWriteDeferred = null
+            return@withContext false
+        }
+
+        val writeSuccess = withTimeoutOrNull(3000) {
+            writeDeferred.await()
+        } ?: true
+
+        pendingWriteDeferred = null
+        return@withContext writeSuccess
     }
 
     fun isConnected(): Boolean = bluetoothGatt != null
@@ -298,3 +374,4 @@ class BleClientManager private constructor(private val context: Context) {
         bluetoothGatt = null
     }
 }
+
