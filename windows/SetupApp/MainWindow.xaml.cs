@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private readonly DpapiVault _vault;
     private CancellationTokenSource? _pipeListenerCts;
     private System.Windows.Forms.NotifyIcon? _notifyIcon;
+    private bool _isExiting = false;
 
     public MainWindow()
     {
@@ -33,6 +34,7 @@ public partial class MainWindow : Window
         LoadSettings();
         GeneratePairingQrCode();
         StartPipeListener();
+        EnsureAutoStartRegistry();
 
         // Check if started minimized in background on Windows startup
         var args = Environment.GetCommandLineArgs();
@@ -41,6 +43,28 @@ public partial class MainWindow : Window
             WindowState = WindowState.Minimized;
             ShowInTaskbar = false;
             Hide();
+        }
+    }
+
+    private void EnsureAutoStartRegistry()
+    {
+        try
+        {
+            string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
+            if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
+                if (key != null)
+                {
+                    string valueName = "BiometricUnlockSetup";
+                    string expectedValue = $"\"{exePath}\" --minimized";
+                    key.SetValue(valueName, expectedValue);
+                }
+            }
+        }
+        catch
+        {
+            // Non-critical if user registry access is restricted
         }
     }
 
@@ -57,6 +81,7 @@ public partial class MainWindow : Window
 
             var contextMenu = new System.Windows.Forms.ContextMenuStrip();
             contextMenu.Items.Add("Open Biometric Setup", null, (s, e) => RestoreFromTray());
+            contextMenu.Items.Add("-");
             contextMenu.Items.Add("Exit", null, (s, e) => ExitApp());
 
             _notifyIcon.ContextMenuStrip = contextMenu;
@@ -75,18 +100,40 @@ public partial class MainWindow : Window
         catch { }
     }
 
-    private void RestoreFromTray()
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (!_isExiting)
+        {
+            e.Cancel = true;
+            Hide();
+            ShowInTaskbar = false;
+            _notifyIcon?.ShowBalloonTip(2000, "Biometric Sync Active", "Running in system tray for instant clipboard sync. Right-click tray icon to Exit.", System.Windows.Forms.ToolTipIcon.Info);
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
+    public void RestoreFromTray()
     {
         Show();
         ShowInTaskbar = true;
         WindowState = WindowState.Normal;
         Activate();
+        Topmost = true;
+        Topmost = false;
+        Focus();
     }
 
-    private void ExitApp()
+    public void ExitApp()
     {
-        _notifyIcon?.Dispose();
-        _notifyIcon = null;
+        _isExiting = true;
+        if (_notifyIcon != null)
+        {
+            _notifyIcon.Visible = false;
+            _notifyIcon.Dispose();
+            _notifyIcon = null;
+        }
         _pipeListenerCts?.Cancel();
         System.Windows.Application.Current.Shutdown();
     }
@@ -127,6 +174,8 @@ public partial class MainWindow : Window
                     if (msg.Command == PipeCommand.ClipboardSync)
                     {
                         string text = msg.StatusMessage;
+                        if (string.IsNullOrEmpty(text)) continue;
+
                         Dispatcher.Invoke(() =>
                         {
                             for (int attempt = 0; attempt < 10; attempt++)

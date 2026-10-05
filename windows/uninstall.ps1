@@ -36,8 +36,8 @@ if ($existing) {
     Write-Host "Service not found, skipping." -ForegroundColor Green
 }
 
-# 3. Remove Desktop & Start Menu Shortcuts
-Write-Host "Removing App Shortcuts & Auto-Start Entry..." -ForegroundColor Yellow
+# 3. Remove Desktop & Start Menu Shortcuts, Auto-Start Registry, and Scheduled Task
+Write-Host "Removing App Shortcuts, Auto-Start Registry & Scheduled Task..." -ForegroundColor Yellow
 $desktopPath = [System.Environment]::GetFolderPath('Desktop')
 $startMenuPath = [System.Environment]::GetFolderPath('Programs')
 
@@ -50,6 +50,9 @@ if (Test-Path $startMenuShortcut) { Remove-Item $startMenuShortcut -Force }
 # Remove User Startup Registry Entry
 Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "BiometricUnlockSetup" -ErrorAction SilentlyContinue
 
+# Remove Scheduled Task
+& schtasks.exe /Delete /TN "BiometricUnlockSetupTask" /F 2>$null | Out-Null
+
 # Stop any running SetupApp process
 Stop-Process -Name "BiometricUnlockSetup" -Force -ErrorAction SilentlyContinue
 
@@ -57,7 +60,7 @@ Stop-Process -Name "BiometricUnlockSetup" -Force -ErrorAction SilentlyContinue
 netsh advfirewall firewall delete rule name="BiometricUnlock WiFi Port 9898" 2>$null | Out-Null
 netsh advfirewall firewall delete rule name="BiometricUnlock UDP Port 9899" 2>$null | Out-Null
 
-Write-Host "Shortcuts, Auto-Start Entry, and Firewall Rules removed!" -ForegroundColor Green
+Write-Host "Shortcuts, Scheduled Task, Auto-Start Entry, and Firewall Rules removed!" -ForegroundColor Green
 
 # 4. Clean DPAPI Vault (Optional - let's ask the user if they want to wipe data)
 $response = Read-Host "Do you want to delete all saved credentials and paired devices? (Y/N)"

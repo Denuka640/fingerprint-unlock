@@ -120,20 +120,41 @@ $shortcutSm.Save()
 
 Write-Host "Shortcuts created on Desktop and Start Menu!" -ForegroundColor Green
 
-# 6. Configure Windows Startup Registry Entry for Clipboard Sync Helper
-Write-Host "Configuring User Session Auto-Start for Instant Clipboard Sync..." -ForegroundColor Yellow
+# 6. Configure Windows Scheduled Task & Auto-Start Registry for Clipboard Sync Helper
+Write-Host "Configuring Startup Scheduled Task & Registry Auto-Start for Instant Clipboard Sync..." -ForegroundColor Yellow
+$taskName = "BiometricUnlockSetupTask"
+
+try {
+    # Remove existing scheduled task if present
+    & schtasks.exe /Delete /TN "$taskName" /F 2>$null | Out-Null
+    
+    # Create new scheduled task to run at user logon
+    & schtasks.exe /Create /TN "$taskName" /TR "`"$setupAppPath`" --minimized" /SC ONLOGON /F | Out-Null
+    Write-Host "Windows Scheduled Task '$taskName' created successfully!" -ForegroundColor Green
+} catch {
+    Write-Warning "Could not create Scheduled Task: $_"
+}
+
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-Set-ItemProperty -Path $runKey -Name "BiometricUnlockSetup" -Value "`"$setupAppPath`" --minimized" -ErrorAction Stop
-Write-Host "User Session Auto-Start configured in Registry!" -ForegroundColor Green
+try {
+    Set-ItemProperty -Path $runKey -Name "BiometricUnlockSetup" -Value "`"$setupAppPath`" --minimized" -ErrorAction Stop
+    Write-Host "User Session Auto-Start configured in Registry!" -ForegroundColor Green
+} catch {
+    Write-Warning "Could not write auto-start entry to HKCU registry: $_"
+}
 
 # Start the Setup App now so Clipboard Sync is immediately active
+Write-Host "Launching Biometric Setup App..." -ForegroundColor Yellow
 Start-Process -FilePath $setupAppPath
 
 Write-Host "`n===============================================" -ForegroundColor Cyan
 Write-Host "🎉 INSTALLATION & AUTO-START COMPLETE! 🎉" -ForegroundColor Green
-Write-Host "1. Both Background Service & Clipboard Sync Helper are configured to auto-start on Windows startup."
-Write-Host "2. Updated Android APK created at: $scriptDir\FingerprintUnlock.apk"
-Write-Host "3. Open 'Biometric Setup' to pair your phone."
-Write-Host "4. Save your Windows credentials in the Setup App."
-Write-Host "5. Press Win+L to lock your screen and test unlock from phone!"
+Write-Host "1. Windows Service & Startup Scheduled Task ('$taskName') are configured to auto-start."
+Write-Host "2. Clipboard Sync runs silently in the System Tray (even when closing the Setup window)."
+Write-Host "3. Updated Android APK created at: $scriptDir\FingerprintUnlock.apk"
+Write-Host "4. Open 'Biometric Setup' to pair your phone."
+Write-Host "5. Save your Windows credentials in the Setup App."
+Write-Host "6. Press Win+L to lock your screen and test unlock from phone!"
 Write-Host "===============================================" -ForegroundColor Cyan
+
+
